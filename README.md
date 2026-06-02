@@ -39,6 +39,20 @@ Open:
 - Health: `http://127.0.0.1:8000/health`
 - API docs: `http://127.0.0.1:8000/docs`
 
+## API-Backed Frontend
+
+Phase 03 connects the static Arabic RTL frontend to read-only FastAPI endpoints while preserving hash routing and the existing UI identity.
+
+Screens now using real database-backed data:
+
+- Dashboard: `/api/research/summary`, `/api/alerts`, `/api/patients`, `/api/dialysis-sessions`
+- Patient List: `/api/patients`
+- Dialysis Session List: `/api/dialysis-sessions`
+- Active Alerts: `/api/alerts`
+- Research Dashboard: `/api/research/summary`
+
+The frontend includes scoped Arabic loading, error, and empty states. It also shows a subtle backend connection indicator based on `/health`.
+
 ## Validation
 
 ```bash

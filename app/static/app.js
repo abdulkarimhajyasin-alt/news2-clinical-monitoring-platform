@@ -1,11 +1,11 @@
 const routes = [
   { id: "dashboard", label: "لوحة التحكم", group: "الرصد السريري", icon: "D", type: "dashboard" },
-  { id: "patients", label: "قائمة المرضى", group: "المرضى", icon: "P", type: "table", entity: "patients" },
+  { id: "patients", label: "قائمة المرضى", group: "المرضى", icon: "P", type: "patients" },
   { id: "create-patient", label: "إضافة مريض", group: "المرضى", icon: "+", type: "form", entity: "patient" },
   { id: "patient-profile", label: "ملف المريض", group: "المرضى", icon: "ID", type: "profile" },
   { id: "patient-baseline", label: "الخط الأساسي", group: "المرضى", icon: "B", type: "baseline" },
   { id: "vascular-access", label: "الوصول الوعائي", group: "المرضى", icon: "V", type: "vascular" },
-  { id: "sessions", label: "جلسات الغسيل", group: "الجلسات", icon: "S", type: "table", entity: "sessions" },
+  { id: "sessions", label: "جلسات الغسيل", group: "الجلسات", icon: "S", type: "sessions" },
   { id: "create-session", label: "إنشاء جلسة", group: "الجلسات", icon: "+", type: "form", entity: "session" },
   { id: "session-details", label: "تفاصيل الجلسة", group: "الجلسات", icon: "SD", type: "details", entity: "session" },
   { id: "intradialytic-monitoring", label: "الرصد أثناء الجلسة", group: "الجلسات", icon: "M", type: "monitoring" },
@@ -40,42 +40,57 @@ const routes = [
   { id: "language-settings", label: "إعدادات اللغة", group: "الإعدادات", icon: "LG", type: "language" }
 ];
 
-// Phase 03 integration boundary: replace static mock arrays below with fetch
-// calls to read-only API endpoints such as /api/patients, /api/alerts, and
-// /api/research/summary without changing the hash-based screen router.
-
-const kpis = [
-  ["مرضى تحت الرصد", "128", "زيادة 8 مرضى هذا الأسبوع", "info"],
-  ["تنبيهات عالية الخطورة", "7", "تحتاج مراجعة خلال 15 دقيقة", "danger"],
-  ["متوسط زمن الاستجابة", "11 د", "أفضل من الهدف التشغيلي", "success"],
-  ["جلسات اليوم", "42", "31 مكتملة و 11 نشطة", "warning"]
-];
-
-const patients = [
-  ["P-1024", "سارة محمود", "56", "ناسور شرياني وريدي", "NEWS2 2", "مستقر"],
-  ["P-1088", "خالد يوسف", "64", "قسطرة وريدية مركزية", "NEWS2 6", "مرتفع"],
-  ["P-1120", "نورا عادل", "48", "طعوم وعائي", "NEWS2 4", "متوسط"],
-  ["P-1182", "محمد سالم", "71", "ناسور شرياني وريدي", "NEWS2 1", "مستقر"]
-];
-
-const genericRows = {
-  sessions: [["S-2201", "P-1088", "08:00", "نشطة", "NEWS2 6", "مراجعة طبية"], ["S-2202", "P-1024", "10:30", "مكتملة", "NEWS2 2", "متابعة روتينية"], ["S-2203", "P-1182", "12:00", "مجدولة", "NEWS2 -", "قيد الانتظار"]],
-  news2: [["N-771", "P-1088", "06:00", "3", "أصفر", "تمت المراجعة"], ["N-772", "P-1088", "08:30", "6", "أحمر", "تصعيد نشط"], ["N-773", "P-1024", "09:00", "2", "أخضر", "مستقر"]],
-  events: [["E-310", "هبوط ضغط", "P-1088", "08:42", "عالي", "مفتوح"], ["E-311", "نقص أكسجة", "P-1120", "11:10", "متوسط", "مغلق"], ["E-312", "حمى", "P-1182", "13:20", "منخفض", "متابعة"]],
-  medical: [["08:43", "طبيب كلى", "تقييم فوري", "تعديل معدل السحب", "مكتمل"], ["08:50", "استشاري", "مراجعة NEWS2", "خطة مراقبة", "نشط"]],
-  nursing: [["08:41", "تمريض الجلسة", "إعادة قياس العلامات", "مكتمل"], ["08:45", "تمريض مسؤول", "إبلاغ الطبيب", "مكتمل"]],
-  outcomes: [["O-120", "P-1088", "استقرار خلال الجلسة", "45 دقيقة", "بدون نقل"], ["O-121", "P-1120", "تصعيد متوسط", "70 دقيقة", "مراقبة إضافية"]],
-  users: [["U-01", "د. أحمد منصور", "طبيب", "نشط", "آخر دخول اليوم"], ["U-02", "ليلى حسن", "تمريض", "نشط", "آخر دخول أمس"]],
-  roles: [["طبيب", "18 صلاحية", "تقييم وتصعيد", "نشط"], ["تمريض", "14 صلاحية", "إدخال ومتابعة", "نشط"], ["باحث", "9 صلاحيات", "تحليلات وتصدير", "نشط"]],
-  audit: [["09:10", "U-01", "تحديث تقييم NEWS2", "P-1088", "نجاح"], ["09:18", "U-02", "إدخال علامات حيوية", "P-1024", "نجاح"]]
+const appState = {
+  health: null,
+  patients: [],
+  dialysisSessions: [],
+  alerts: [],
+  researchSummary: null,
+  loading: {},
+  errors: {}
 };
 
-const timelineItems = [
-  ["08:30", "ارتفاع NEWS2 إلى 6", "تغير في معدل التنفس وضغط الدم مع إنذار عالي الخطورة."],
-  ["08:35", "تأكيد تمريضي", "إعادة قياس العلامات الحيوية وتثبيت حالة الوصول الوعائي."],
-  ["08:43", "تصعيد طبي", "تقييم الطبيب وتعديل خطة الجلسة ومعدل السحب."],
-  ["09:05", "انخفاض درجة الخطورة", "تحسن تدريجي مع استمرار المراقبة كل 15 دقيقة."]
-];
+const api = {
+  async request(path) {
+    try {
+      const response = await fetch(path, { headers: { Accept: "application/json" } });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      throw new Error(error.message || "network_error");
+    }
+  },
+  getHealth() {
+    return this.request("/health").then(normalizeHealth);
+  },
+  getPatients() {
+    return this.request("/api/patients").then((rows) => rows.map(normalizePatient));
+  },
+  getDialysisSessions() {
+    return this.request("/api/dialysis-sessions").then((rows) => rows.map(normalizeSession));
+  },
+  getAlerts() {
+    return this.request("/api/alerts").then((rows) => rows.map(normalizeAlert));
+  },
+  getResearchSummary() {
+    return this.request("/api/research/summary").then(normalizeResearchSummary);
+  }
+};
+
+const app = document.getElementById("app");
+
+const fallbackRows = {
+  news2: [["N-771", "ANON-P-1002", "06:00", "3", "متوسط", "تمت المراجعة"], ["N-772", "ANON-P-1002", "08:30", "16", "حرج", "تصعيد نشط"]],
+  events: [["E-310", "هبوط ضغط حاد", "ANON-P-1002", "08:42", "حرج", "مفتوح"]],
+  medical: [["08:43", "طبيب كلى", "تقييم فوري", "تعديل معدل السحب", "مكتمل"]],
+  nursing: [["08:41", "تمريض الجلسة", "إعادة قياس العلامات", "مكتمل"]],
+  outcomes: [["O-120", "ANON-P-1002", "إيقاف الجلسة مبكرا", "24 ساعة", "مستقر"]],
+  users: [["U-01", "د. باحث سريري 01", "إدارة", "نشط", "بيانات تجريبية"]],
+  roles: [["طبيب", "18 صلاحية", "تقييم وتصعيد", "نشط"], ["تمريض", "14 صلاحية", "إدخال ومتابعة", "نشط"]],
+  audit: [["09:10", "U-01", "تهيئة قاعدة البيانات", "seed_v1", "نجاح"]]
+};
 
 const formFields = {
   patient: ["الاسم الكامل", "رقم الملف", "تاريخ الميلاد", "الجنس", "نوع الوصول الوعائي", "الأمراض المصاحبة", "خطة الغسيل", "ملاحظات سريرية"],
@@ -85,47 +100,101 @@ const formFields = {
 
 const subtitles = {
   dashboard: "رصد تشغيلي مباشر للمخاطر والتنبيهات وجودة الاستجابة.",
-  patients: "إدارة ملفات مرضى الغسيل الكلوي مع مؤشرات الخطر الحالية.",
-  "create-patient": "تسجيل مريض جديد مع بيانات سريرية أولية قابلة للتوسع.",
-  "patient-profile": "ملف سريري موحد يربط الخط الأساسي والجلسات والتنبيهات.",
-  "patient-baseline": "قيم مرجعية تساعد على تفسير تغير NEWS2 أثناء الجلسات.",
-  "vascular-access": "توثيق حالة الوصول الوعائي ومخاطر العدوى والتدفق.",
-  sessions: "متابعة الجلسات المجدولة والنشطة والمكتملة.",
-  "create-session": "فتح جلسة غسيل جديدة مرتبطة بالمريض وخطة الرصد.",
-  "session-details": "تفاصيل تشغيلية وسريرية للجلسة الحالية.",
-  "intradialytic-monitoring": "مراقبة مستمرة للعلامات الحيوية ومؤشرات التدهور.",
-  "vital-signs-entry": "إدخال العلامات الحيوية المطلوبة لحساب NEWS2.",
-  "news2-assessment": "تقييم منظم لمكونات NEWS2 والتصعيد المرتبط بها.",
-  "news2-trend": "اتجاهات NEWS2 عبر الجلسة والزيارات السابقة.",
-  "news2-history": "سجل قياسات NEWS2 وإجراءات الاستجابة.",
-  "active-alerts": "قائمة التنبيهات السريرية المفتوحة حسب الأولوية.",
-  "alert-details": "سياق التنبيه والإجراءات المطلوبة ومؤشرات الخطر.",
-  "alert-timeline": "تسلسل زمني للتنبيه منذ الاكتشاف حتى الإغلاق.",
-  "deterioration-events": "أحداث تدهور موثقة لأغراض السلامة والبحث.",
-  "event-details": "تفاصيل الحدث والربط مع الجلسة والمخرجات.",
-  "event-timeline": "تسلسل سريري وتشغيلي للحدث.",
-  "medical-response-log": "توثيق قرارات وتدخلات الفريق الطبي.",
-  "nursing-response-log": "توثيق إجراءات التمريض أثناء التصعيد.",
-  "response-workflow": "مسار الاستجابة من الاكتشاف إلى الإغلاق.",
-  "response-time-dashboard": "مؤشرات سرعة الاستجابة والالتزام بالأهداف.",
-  "response-analytics": "تحليل أنماط التصعيد والأداء التشغيلي.",
-  "clinical-outcomes": "مخرجات سريرية مرتبطة بالجلسات والتنبيهات.",
-  "outcome-tracking": "متابعة حالة المخرجات حتى الإغلاق.",
-  "outcome-analytics": "تحليل أثر الرصد المبكر على النتائج السريرية.",
-  "research-dashboard": "رؤية بحثية موحدة للبيانات والمؤشرات.",
-  "pre-post-comparison": "مقارنة مؤشرات ما قبل وبعد تطبيق الرصد.",
-  "study-metrics": "مؤشرات الدراسة وجودة البيانات والامتثال.",
-  "dataset-statistics": "توزيع البيانات وحجم العينات ومعدلات الاكتمال.",
-  "export-center": "تصدير آمن ومنظم للبيانات البحثية.",
-  users: "إدارة المستخدمين المرتبطين بالمنصة.",
-  roles: "إدارة أدوار العمل والصلاحيات المتصلة بها.",
-  permissions: "مصفوفة صلاحيات وظيفية قابلة للمراجعة.",
-  "audit-logs": "سجل تدقيق للإجراءات الحساسة داخل النظام.",
-  "system-settings": "إعدادات تشغيلية عامة للمنصة.",
-  "language-settings": "تهيئة اللغة والاتجاه مع دعم التوسع للإنجليزية."
+  patients: "قائمة مرضى الغسيل الكلوي من قاعدة البيانات المحلية.",
+  sessions: "جلسات الغسيل المسجلة في قاعدة البيانات.",
+  "active-alerts": "تنبيهات سريرية حقيقية من بيانات التهيئة المحلية.",
+  "research-dashboard": "ملخص بحثي مباشر من قاعدة البيانات.",
+  default: "واجهة سريرية متصلة ضمن نظام NEWS2."
 };
 
-const app = document.getElementById("app");
+function normalizeHealth(data) {
+  return {
+    status: data?.status || "unknown",
+    service: data?.service || "",
+    database: data?.database || "unknown",
+    connected: data?.status === "ok" && data?.database === "connected"
+  };
+}
+
+function normalizePatient(row) {
+  return {
+    id: row.id,
+    patientCode: row.patient_code || `P-${row.id}`,
+    age: row.age ?? "-",
+    gender: row.gender || "unknown",
+    studyPhase: row.study_phase || "unknown",
+    studyGroup: row.study_group || "unknown",
+    dialysisVintageMonths: row.dialysis_vintage_months ?? "-",
+    weeklySessionsCount: row.weekly_sessions_count ?? "-"
+  };
+}
+
+function normalizeSession(row) {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    patientCode: row.patient_code || `ID ${row.patient_id}`,
+    sessionDate: row.session_date || "-",
+    weekday: row.weekday || "-",
+    actualStartTime: row.actual_start_time || null,
+    actualEndTime: row.actual_end_time || null,
+    targetUltrafiltration: row.target_ultrafiltration ?? "-",
+    sessionStatus: row.session_status || "unknown"
+  };
+}
+
+function normalizeAlert(row) {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    patientCode: row.patient_code || `ID ${row.patient_id}`,
+    riskLevel: row.risk_level || "unknown",
+    severityLevel: row.severity_level || "unknown",
+    status: row.status || "unknown",
+    priority: row.priority || "-",
+    triggerReason: row.trigger_reason || "-",
+    createdAt: row.created_at || null
+  };
+}
+
+function normalizeResearchSummary(row) {
+  return {
+    patientsCount: row?.patients_count ?? 0,
+    sessionsCount: row?.sessions_count ?? 0,
+    measurementsCount: row?.measurements_count ?? 0,
+    news2AssessmentsCount: row?.news2_assessments_count ?? 0,
+    alertsCount: row?.alerts_count ?? 0,
+    activeAlertsCount: row?.active_alerts_count ?? 0,
+    deteriorationEventsCount: row?.deterioration_events_count ?? 0,
+    responsesCount: row?.responses_count ?? 0,
+    outcomesCount: row?.outcomes_count ?? 0,
+    averageNews2: row?.average_news2 ?? null
+  };
+}
+
+const labels = {
+  risk: { low: "منخفض", medium: "متوسط", high: "مرتفع", critical: "حرج" },
+  studyPhase: { pre_implementation: "قبل التطبيق", post_implementation: "بعد التطبيق" },
+  studyGroup: { control: "ضابطة", intervention: "تدخل" },
+  gender: { male: "ذكر", female: "أنثى" },
+  status: { new: "جديد", viewed: "تمت المشاهدة", acknowledged: "تم التأكيد", in_progress: "قيد التنفيذ", closed: "مغلق", cancelled: "ملغى" },
+  sessionStatus: { scheduled: "مجدولة", active: "نشطة", completed: "مكتملة", cancelled: "ملغاة" }
+};
+
+function label(map, value) {
+  return map[value] || value || "-";
+}
+
+function riskLevelLabel(value) {
+  return label(labels.risk, value);
+}
+
+function riskTone(value) {
+  if (value === "critical" || value === "high" || value === "حرج" || value === "مرتفع") return "danger";
+  if (value === "medium" || value === "متوسط") return "warning";
+  if (value === "low" || value === "منخفض") return "success";
+  return "neutral";
+}
 
 function currentRoute() {
   return location.hash.replace("#/", "") || "login";
@@ -135,8 +204,85 @@ function setRoute(routeId) {
   location.hash = `/${routeId}`;
 }
 
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char]));
+}
+
+function formatDateTime(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("ar", { dateStyle: "short", timeStyle: "short" });
+}
+
 function badge(text, tone = "neutral", critical = false) {
-  return `<span class="badge ${tone} ${critical ? "critical" : ""}">${text}</span>`;
+  return `<span class="badge ${tone} ${critical ? "critical" : ""}">${escapeHtml(text)}</span>`;
+}
+
+function healthBadge() {
+  const connected = appState.health?.connected;
+  const text = connected ? "متصل بالخادم" : "غير متصل بالخادم";
+  const tone = connected ? "success" : "warning";
+  return `<span class="server-status ${tone}" aria-label="حالة الاتصال بالخادم">${text}</span>`;
+}
+
+function loadingBlock(text = "جاري تحميل البيانات السريرية...") {
+  return `<div class="loading-state" role="status" aria-live="polite"><span class="ecg-loader"></span><span>${text}</span></div><div class="grid cols-3">${[1, 2, 3].map(() => `<div class="card skeleton-card"><div></div><div></div><div></div></div>`).join("")}</div>`;
+}
+
+function tableSkeleton(text) {
+  return `${loadingBlock(text)}<div class="card table-skeleton"><div class="card-body">${[1, 2, 3, 4].map(() => `<div class="skeleton-row"></div>`).join("")}</div></div>`;
+}
+
+function errorBlock(key) {
+  const message = appState.errors[key] || "حدث خطأ أثناء الاتصال بالخادم";
+  return `<div class="state-message error" role="alert"><strong>تعذر تحميل البيانات</strong><span>${escapeHtml(message)}</span><span>حاول تحديث الصفحة أو تشغيل الخادم المحلي.</span></div>`;
+}
+
+function emptyBlock(text) {
+  return `<div class="state-message empty"><strong>${escapeHtml(text)}</strong><span>ستظهر البيانات هنا بعد تهيئة قاعدة البيانات أو توفر سجلات جديدة.</span></div>`;
+}
+
+function setLoading(key, value) {
+  appState.loading[key] = value;
+}
+
+async function loadResource(key, loader) {
+  setLoading(key, true);
+  appState.errors[key] = null;
+  render();
+  try {
+    appState[key] = await loader();
+  } catch (error) {
+    appState.errors[key] = error.message;
+  } finally {
+    setLoading(key, false);
+    render();
+  }
+}
+
+async function loadHealth() {
+  try {
+    appState.health = await api.getHealth();
+    appState.errors.health = null;
+  } catch (error) {
+    appState.health = { connected: false };
+    appState.errors.health = error.message;
+  }
+  render();
+}
+
+function ensureDataForRoute(route) {
+  if (route.id === "dashboard") {
+    if (!appState.researchSummary && !appState.loading.researchSummary) loadResource("researchSummary", api.getResearchSummary.bind(api));
+    if (!appState.alerts.length && !appState.loading.alerts) loadResource("alerts", api.getAlerts.bind(api));
+    if (!appState.patients.length && !appState.loading.patients) loadResource("patients", api.getPatients.bind(api));
+    if (!appState.dialysisSessions.length && !appState.loading.dialysisSessions) loadResource("dialysisSessions", api.getDialysisSessions.bind(api));
+  }
+  if (route.type === "patients" && !appState.patients.length && !appState.loading.patients) loadResource("patients", api.getPatients.bind(api));
+  if (route.type === "sessions" && !appState.dialysisSessions.length && !appState.loading.dialysisSessions) loadResource("dialysisSessions", api.getDialysisSessions.bind(api));
+  if (route.type === "alerts" && !appState.alerts.length && !appState.loading.alerts) loadResource("alerts", api.getAlerts.bind(api));
+  if (route.type === "research" && !appState.researchSummary && !appState.loading.researchSummary) loadResource("researchSummary", api.getResearchSummary.bind(api));
 }
 
 function renderLogin() {
@@ -148,7 +294,7 @@ function renderLogin() {
       </section>
       <section class="login-card">
         <h2>تسجيل الدخول</h2>
-        <p class="subtitle">دخول آمن للفريق السريري والبحثي</p>
+        <p class="subtitle">دخول تجريبي للواجهة. المصادقة الحقيقية ليست ضمن هذه المرحلة.</p>
         <div class="field"><label>البريد الإلكتروني</label><input type="email" value="clinician@karamixlabs.local"></div>
         <div class="field" style="margin-top:14px"><label>كلمة المرور</label><input type="password" value="password"></div>
         <div class="footer-actions">
@@ -178,22 +324,21 @@ function renderShell(route) {
             <div class="nav-group-title">${group}</div>
             ${items.map((item) => `
               <button class="nav-link ${item.id === route.id ? "active" : ""}" onclick="setRoute('${item.id}')">
-                <span class="nav-icon">${item.icon}</span>
-                <span>${item.label}</span>
+                <span class="nav-icon">${item.icon}</span><span>${item.label}</span>
               </button>`).join("")}
           </nav>`).join("")}
       </aside>
       <main class="main">
         <header class="topbar">
-          <button class="icon-btn mobile-toggle" onclick="document.body.classList.toggle('nav-open')" title="القائمة">☰</button>
+          <button class="icon-btn mobile-toggle" aria-label="فتح القائمة الجانبية" onclick="document.body.classList.toggle('nav-open')">☰</button>
           <div>
             <h1>${route.label}</h1>
-            <p>${subtitles[route.id] || "واجهة سريرية متصلة ضمن نظام NEWS2."}</p>
+            <p>${subtitles[route.id] || subtitles.default}</p>
           </div>
           <div class="top-actions">
+            ${healthBadge()}
             ${badge("RTL", "info")}
-            ${badge("بحث سريري", "success")}
-            <button class="icon-btn" title="التنبيهات" onclick="setRoute('active-alerts')">!</button>
+            <button class="icon-btn" aria-label="عرض التنبيهات" title="التنبيهات" onclick="setRoute('active-alerts')">!</button>
             <button class="btn" onclick="setRoute('login')">خروج</button>
           </div>
         </header>
@@ -205,7 +350,11 @@ function renderShell(route) {
 function renderScreen(route) {
   const renderers = {
     dashboard: renderDashboard,
-    table: () => renderTableScreen(route),
+    patients: renderPatients,
+    sessions: renderSessions,
+    alerts: renderAlerts,
+    research: renderResearch,
+    table: () => renderStaticTable(route),
     form: () => renderFormScreen(route),
     profile: renderProfile,
     baseline: renderBaseline,
@@ -214,11 +363,9 @@ function renderScreen(route) {
     monitoring: renderMonitoring,
     assessment: renderAssessment,
     trend: renderTrend,
-    alerts: renderAlerts,
     timeline: () => renderTimeline(route),
     workflow: () => renderWorkflow(route),
     analytics: () => renderAnalytics(route),
-    research: renderResearch,
     comparison: renderComparison,
     export: renderExport,
     permissions: renderPermissions,
@@ -229,88 +376,171 @@ function renderScreen(route) {
 }
 
 function renderDashboard() {
+  if (appState.loading.researchSummary && !appState.researchSummary) return loadingBlock("جاري تحميل البيانات السريرية...");
+  const summary = appState.researchSummary || {};
+  const alerts = appState.alerts || [];
+  const criticalAlerts = alerts.filter((item) => item.riskLevel === "critical" || item.severityLevel === "critical").length;
+  const latestAlerts = alerts.slice(0, 5).map(alertRow);
   return `
+    ${appState.errors.researchSummary ? errorBlock("researchSummary") : ""}
     <div class="dashboard-hero">
       <div class="hero-band">
         <h2>رصد مبكر للتدهور السريري أثناء جلسات الغسيل الكلوي</h2>
-        <p>واجهة موحدة تربط العلامات الحيوية وNEWS2 والتنبيهات والاستجابة السريرية والتحليلات البحثية في سياق تشغيلي واحد.</p>
+        <p>البيانات المعروضة هنا تقرأ من قاعدة البيانات المحلية عبر FastAPI وتبقى الواجهة جاهزة للتوسع المرحلي.</p>
       </div>
       <div class="status-panel">
-        ${renderKpi(["الاستقرار العام", "94%", "التزام مرتفع ببروتوكول الرصد", "success"])}
-        ${renderKpi(["تنبيه حرج", "1", "P-1088 يحتاج متابعة الآن", "danger"], true)}
+        ${renderKpi(["حالة الخادم", appState.health?.connected ? "متصل" : "غير متصل", "فحص /health", appState.health?.connected ? "success" : "warning"])}
+        ${renderKpi(["تنبيهات حرجة", String(criticalAlerts), "من بيانات التنبيهات", criticalAlerts > 0 ? "danger" : "success"], criticalAlerts > 0)}
       </div>
     </div>
-    <div class="grid cols-4">${kpis.map((item) => renderKpi(item, item[3] === "danger")).join("")}</div>
-    <div class="grid cols-2" style="margin-top:16px">
-      ${card("منحنى NEWS2 اليوم", renderLineChart())}
-      ${card("توزيع المخاطر", renderBarChart([42, 28, 18, 7]))}
+    <div class="grid cols-4">
+      ${renderKpi(["إجمالي المرضى", summary.patientsCount ?? appState.patients.length, "من /api/patients", "info"])}
+      ${renderKpi(["جلسات الغسيل", summary.sessionsCount ?? appState.dialysisSessions.length, "من /api/dialysis-sessions", "info"])}
+      ${renderKpi(["التنبيهات النشطة", summary.activeAlertsCount ?? alerts.length, "من /api/alerts", alerts.length ? "warning" : "success"])}
+      ${renderKpi(["متوسط NEWS2", summary.averageNews2 ?? "-", "من الملخص البحثي", (summary.averageNews2 || 0) >= 5 ? "danger" : "success"], (summary.averageNews2 || 0) >= 5)}
     </div>
-    <div style="margin-top:16px">${card("أحدث التنبيهات", renderTable(["المعرف", "المريض", "الوقت", "الخطورة", "الحالة"], genericRows.events))}</div>`;
+    <div class="grid cols-2" style="margin-top:16px">
+      ${card("منحنى NEWS2 اليوم", renderLineChart("اتجاه NEWS2 تجريبي لحين توفير endpoint للاتجاهات"))}
+      ${card("توزيع مؤشرات البحث", renderBarChart([summary.patientsCount || 0, summary.sessionsCount || 0, summary.measurementsCount || 0, summary.alertsCount || 0]))}
+    </div>
+    <div style="margin-top:16px">
+      ${appState.loading.alerts ? tableSkeleton("جاري تحميل التنبيهات...") : card("أحدث التنبيهات", latestAlerts.length ? renderTable(["المعرف", "المريض", "الخطورة", "الحالة", "وقت الإنشاء"], latestAlerts) : emptyBlock("لا توجد تنبيهات نشطة"))}
+    </div>`;
+}
+
+function renderPatients() {
+  if (appState.loading.patients) return tableSkeleton("جاري تحميل قائمة المرضى...");
+  if (appState.errors.patients) return errorBlock("patients");
+  if (!appState.patients.length) return emptyBlock("لا توجد بيانات مرضى حتى الآن");
+  const rows = appState.patients.map((patient) => [
+    patient.patientCode,
+    patient.age,
+    label(labels.gender, patient.gender),
+    label(labels.studyPhase, patient.studyPhase),
+    label(labels.studyGroup, patient.studyGroup),
+    patient.dialysisVintageMonths,
+    patient.weeklySessionsCount
+  ]);
+  return `
+    <div class="grid cols-3">
+      ${renderKpi(["إجمالي المرضى", appState.patients.length, "بيانات قاعدة محلية", "info"])}
+      ${renderKpi(["مرحلة التدخل", appState.patients.filter((p) => p.studyGroup === "intervention").length, "مجموعة الدراسة", "success"])}
+      ${renderKpi(["متوسط الجلسات", "3/أسبوع", "من بيانات التهيئة", "info"])}
+    </div>
+    <div style="margin-top:16px">${card("قائمة المرضى", renderTable(["رمز المريض", "العمر", "الجنس", "مرحلة الدراسة", "مجموعة الدراسة", "مدة الغسيل بالشهور", "جلسات أسبوعية"], rows))}</div>`;
+}
+
+function renderSessions() {
+  if (appState.loading.dialysisSessions) return tableSkeleton("جاري تحميل جلسات الغسيل المسجلة...");
+  if (appState.errors.dialysisSessions) return errorBlock("dialysisSessions");
+  if (!appState.dialysisSessions.length) return emptyBlock("لا توجد جلسات غسيل مسجلة");
+  const rows = appState.dialysisSessions.map((session) => [
+    session.id,
+    session.patientCode,
+    session.sessionDate,
+    session.weekday,
+    formatDateTime(session.actualStartTime),
+    formatDateTime(session.actualEndTime),
+    session.targetUltrafiltration,
+    label(labels.sessionStatus, session.sessionStatus)
+  ]);
+  return card("جلسات الغسيل", renderTable(["المعرف", "رمز المريض", "تاريخ الجلسة", "اليوم", "وقت البدء", "وقت الانتهاء", "السحب المستهدف", "الحالة"], rows));
+}
+
+function renderAlerts() {
+  if (appState.loading.alerts) return tableSkeleton("جاري تحميل التنبيهات...");
+  if (appState.errors.alerts) return errorBlock("alerts");
+  if (!appState.alerts.length) return emptyBlock("لا توجد تنبيهات نشطة");
+  const critical = appState.alerts.filter((item) => item.riskLevel === "critical").length;
+  return `
+    <div class="grid cols-3">
+      ${renderKpi(["حرجة", critical, "تحتاج تصعيد فوري", critical ? "danger" : "success"], critical > 0)}
+      ${renderKpi(["إجمالي التنبيهات", appState.alerts.length, "من قاعدة البيانات", "info"])}
+      ${renderKpi(["قيد المتابعة", appState.alerts.filter((a) => a.status !== "closed").length, "غير مغلقة", "warning"])}
+    </div>
+    <div style="margin-top:16px">${card("التنبيهات النشطة", renderTable(["المعرف", "رمز المريض", "مستوى الخطر", "الشدة", "الحالة", "الأولوية", "سبب التنبيه", "وقت الإنشاء"], appState.alerts.map(alertFullRow)))}</div>`;
+}
+
+function renderResearch() {
+  if (appState.loading.researchSummary) return loadingBlock("جاري تحميل ملخص البحث...");
+  if (appState.errors.researchSummary) return errorBlock("researchSummary");
+  if (!appState.researchSummary) return emptyBlock("لا توجد بيانات بحثية حتى الآن");
+  const s = appState.researchSummary;
+  return `
+    <div class="dashboard-hero">
+      <div class="hero-band">
+        <h2>لوحة بحثية لقياس أثر الرصد المبكر</h2>
+        <p>ملخص مباشر من قاعدة البيانات المحلية لقياس جاهزية بيانات الدراسة قبل ربط التحليلات المتقدمة.</p>
+      </div>
+      <div class="status-panel">
+        ${renderKpi(["اكتمال الملخص", "متاح", "من /api/research/summary", "success"])}
+        ${renderKpi(["متوسط NEWS2", s.averageNews2 ?? "-", "قابل للتوسع", (s.averageNews2 || 0) >= 5 ? "danger" : "info"], (s.averageNews2 || 0) >= 5)}
+      </div>
+    </div>
+    <div class="grid cols-4">
+      ${renderKpi(["إجمالي المرضى", s.patientsCount, "عينة بحثية", "info"])}
+      ${renderKpi(["إجمالي الجلسات", s.sessionsCount, "جلسات موثقة", "info"])}
+      ${renderKpi(["القياسات", s.measurementsCount, "علامات حيوية", "success"])}
+      ${renderKpi(["التنبيهات", s.alertsCount, "سجلات إنذار", s.alertsCount ? "warning" : "success"])}
+      ${renderKpi(["أحداث التدهور", s.deteriorationEventsCount, "موثقة", s.deteriorationEventsCount ? "danger" : "success"], s.deteriorationEventsCount > 0)}
+      ${renderKpi(["الاستجابات", s.responsesCount, "إجراءات سريرية", "info"])}
+      ${renderKpi(["المخرجات", s.outcomesCount, "خلال 24-72 ساعة", "success"])}
+      ${renderKpi(["تقييمات NEWS2", s.news2AssessmentsCount, "تقييمات مخزنة", "info"])}
+    </div>
+    <div class="grid cols-2" style="margin-top:16px">
+      ${card("توزيع البيانات", renderBarChart([s.patientsCount, s.sessionsCount, s.measurementsCount, s.news2AssessmentsCount, s.alertsCount, s.outcomesCount]))}
+      ${card("مؤشرات البحث", renderTable(["المؤشر", "القيمة", "المصدر"], [["المرضى", s.patientsCount, "patients"], ["الجلسات", s.sessionsCount, "dialysis_sessions"], ["أحداث التدهور", s.deteriorationEventsCount, "clinical_deterioration_events"], ["المخرجات", s.outcomesCount, "clinical_outcomes"]]))}
+    </div>`;
+}
+
+function alertRow(alert) {
+  return [alert.id, alert.patientCode, badge(riskLevelLabel(alert.riskLevel), riskTone(alert.riskLevel), alert.riskLevel === "critical"), label(labels.status, alert.status), formatDateTime(alert.createdAt)];
+}
+
+function alertFullRow(alert) {
+  return [alert.id, alert.patientCode, badge(riskLevelLabel(alert.riskLevel), riskTone(alert.riskLevel), alert.riskLevel === "critical"), badge(riskLevelLabel(alert.severityLevel), riskTone(alert.severityLevel), alert.severityLevel === "critical"), label(labels.status, alert.status), alert.priority, alert.triggerReason, formatDateTime(alert.createdAt)];
 }
 
 function renderKpi(item, critical = false) {
-  const [label, value, meta, tone] = item;
-  return `<div class="card kpi ${critical ? "critical" : ""}"><div class="card-body"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div><div class="kpi-meta">${badge(meta, tone, critical)}</div></div></div>`;
+  const [labelText, value, meta, tone] = item;
+  return `<div class="card kpi ${critical ? "critical" : ""}"><div class="card-body"><div class="kpi-label">${escapeHtml(labelText)}</div><div class="kpi-value">${escapeHtml(value)}</div><div class="kpi-meta">${badge(meta, tone, critical)}</div></div></div>`;
 }
 
-function renderTableScreen(route) {
-  const headers = tableHeaders(route.entity);
-  const rows = route.entity === "patients" ? patients : genericRows[route.entity] || genericRows.sessions;
-  return `
-    <div class="grid cols-3">
-      ${renderKpi(["إجمالي السجلات", String(rows.length * 24), "بيانات نشطة", "info"])}
-      ${renderKpi(["مراجعات مفتوحة", "12", "تحتاج متابعة", "warning"])}
-      ${renderKpi(["امتثال البيانات", "97%", "جودة عالية", "success"])}
-    </div>
-    <div style="margin-top:16px">${card(route.label, renderTable(headers, rows))}</div>`;
-}
-
-function tableHeaders(entity) {
-  const map = {
-    patients: ["الملف", "المريض", "العمر", "الوصول الوعائي", "NEWS2", "الحالة"],
-    roles: ["الدور", "الصلاحيات", "النطاق", "الحالة"],
-    audit: ["الوقت", "المستخدم", "الإجراء", "المرجع", "النتيجة"]
-  };
-  return map[entity] || ["المعرف", "المرجع", "الوقت", "الحالة", "المؤشر", "الإجراء"];
+function renderStaticTable(route) {
+  const rows = fallbackRows[route.entity] || fallbackRows.events;
+  return `<div class="grid cols-3">${renderKpi(["إجمالي السجلات", rows.length, "بيانات مؤقتة حتى إضافة endpoint", "info"])}${renderKpi(["جاهزية التكامل", "جزئية", "سيتم ربطها لاحقا", "warning"])}${renderKpi(["حالة الشاشة", "تعمل", "hash routing محفوظ", "success"])}</div><div style="margin-top:16px">${card(route.label, renderTable(["المعرف", "المرجع", "الوقت", "الحالة", "المؤشر"], rows))}</div>`;
 }
 
 function renderTable(headers, rows) {
-  return `<div class="table-wrap"><table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${formatCell(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${String(cell).startsWith("<span") ? cell : formatCell(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
 }
 
 function formatCell(cell) {
-  const value = String(cell);
-  if (value.includes("عالي") || value.includes("مرتفع") || value.includes("أحمر") || value.includes("NEWS2 6")) return badge(value, "danger", value.includes("NEWS2 6"));
-  if (value.includes("متوسط") || value.includes("أصفر") || value.includes("متابعة")) return badge(value, "warning");
-  if (value.includes("مستقر") || value.includes("مكتمل") || value.includes("نجاح") || value.includes("نشط")) return badge(value, "success");
-  return value;
+  const value = String(cell ?? "-");
+  if (["حرج", "مرتفع", "critical", "high"].includes(value)) return badge(value, "danger", value === "حرج" || value === "critical");
+  if (["متوسط", "medium", "متابعة", "قيد المتابعة"].includes(value)) return badge(value, "warning");
+  if (["منخفض", "low", "مكتمل", "مستقر", "نجاح", "نشط", "مكتملة"].includes(value)) return badge(value, "success");
+  return escapeHtml(value);
 }
 
 function renderFormScreen(route) {
   const fields = formFields[route.entity] || formFields.patient;
-  return card(route.label, `
-    <div class="form-grid">
-      ${fields.map((field, index) => `
-        <div class="field ${index === fields.length - 1 ? "full" : ""}">
-          <label>${field}</label>
-          ${index === fields.length - 1 ? `<textarea placeholder="${field}"></textarea>` : `<input placeholder="${field}">`}
-        </div>`).join("")}
-    </div>
-    <div class="footer-actions">
-      <button class="btn primary">حفظ</button>
-      <button class="btn">حفظ كمسودة</button>
-      <button class="btn">إلغاء</button>
-    </div>`);
+  return card(route.label, `<div class="form-grid">${fields.map((field, index) => `<div class="field ${index === fields.length - 1 ? "full" : ""}"><label>${field}</label>${index === fields.length - 1 ? `<textarea placeholder="${field}"></textarea>` : `<input placeholder="${field}">`}</div>`).join("")}</div><div class="footer-actions"><button class="btn primary">حفظ</button><button class="btn">حفظ كمسودة</button><button class="btn">إلغاء</button></div>`);
 }
 
 function renderProfile() {
-  return `
-    ${card("ملخص المريض", `<div class="patient-summary">${["الملف P-1088", "العمر 64", "NEWS2 الحالي 6", "الوصول قسطرة مركزية"].map((x) => `<div class="summary-cell"><span>${x.split(" ")[0]}</span><strong>${x.substring(x.indexOf(" ") + 1)}</strong></div>`).join("")}</div>`)}
-    <div class="grid cols-2" style="margin-top:16px">${card("اتجاه NEWS2", renderLineChart())}${card("آخر الجلسات", renderTable(tableHeaders("sessions"), genericRows.sessions))}</div>`;
+  const patient = appState.patients[0];
+  return `${card("ملخص المريض", `<div class="patient-summary">${[
+    ["الرمز", patient?.patientCode || "ANON-P-1001"],
+    ["العمر", patient?.age || "58"],
+    ["مرحلة الدراسة", patient ? label(labels.studyPhase, patient.studyPhase) : "بعد التطبيق"],
+    ["المجموعة", patient ? label(labels.studyGroup, patient.studyGroup) : "تدخل"]
+  ].map(([a, b]) => `<div class="summary-cell"><span>${a}</span><strong>${b}</strong></div>`).join("")}</div>`)}
+  <div class="grid cols-2" style="margin-top:16px">${card("اتجاه NEWS2", renderLineChart("اتجاه NEWS2 للمريض"))}${card("آخر الجلسات", renderTable(["المعرف", "المريض", "التاريخ", "الحالة"], appState.dialysisSessions.slice(0, 3).map((s) => [s.id, s.patientCode, s.sessionDate, label(labels.sessionStatus, s.sessionStatus)])))}</div>`;
 }
 
 function renderBaseline() {
-  return `<div class="grid cols-2">${card("القيم المرجعية", renderTable(["المؤشر", "القيمة المرجعية", "آخر قراءة", "التقييم"], [["ضغط الدم", "135/82", "118/70", "انخفاض"], ["النبض", "78", "96", "ارتفاع"], ["تشبع الأكسجين", "96%", "91%", "مراجعة"]]))}${card("سياق سريري", renderFormText(["الأمراض المصاحبة", "الأدوية المؤثرة", "ملاحظات خط الأساس"]))}</div>`;
+  return `<div class="grid cols-2">${card("القيم المرجعية", renderTable(["المؤشر", "القيمة المرجعية", "آخر قراءة", "التقييم"], [["ضغط الدم", "135/82", "118/70", "انخفاض"], ["النبض", "78", "96", "ارتفاع"], ["تشبع الأكسجين", "96%", "91%", "متابعة"]]))}${card("سياق سريري", renderFormText(["الأمراض المصاحبة", "الأدوية المؤثرة", "ملاحظات خط الأساس"]))}</div>`;
 }
 
 function renderVascular() {
@@ -319,27 +549,23 @@ function renderVascular() {
 
 function renderDetails(route) {
   const title = route.entity === "alert" ? "تنبيه NEWS2 عالي الخطورة" : route.entity === "event" ? "حدث تدهور سريري" : "جلسة غسيل نشطة";
-  return `<div class="split"><div>${card(title, `<div class="patient-summary">${["المريض P-1088", "NEWS2 6", "الوقت 08:42", "الحالة مفتوح"].map((x) => `<div class="summary-cell"><span>${x.split(" ")[0]}</span><strong>${x.substring(x.indexOf(" ") + 1)}</strong></div>`).join("")}</div><div style="margin-top:18px">${renderLineChart()}</div>`)}</div><aside>${card("إجراءات مطلوبة", renderActions())}</aside></div>`;
+  return `<div class="split"><div>${card(title, `<div class="patient-summary">${[["المريض", "ANON-P-1002"], ["NEWS2", "16"], ["الوقت", "08:42"], ["الحالة", "مفتوح"]].map(([a, b]) => `<div class="summary-cell"><span>${a}</span><strong>${b}</strong></div>`).join("")}</div><div style="margin-top:18px">${renderLineChart("تفاصيل الاتجاه السريري")}</div>`)}</div><aside>${card("إجراءات مطلوبة", renderActions())}</aside></div>`;
 }
 
 function renderMonitoring() {
-  return `<div class="grid cols-4">${[["ضغط الدم", "118/70", "انخفاض عن الخط الأساسي", "warning"], ["النبض", "96", "صاعد", "warning"], ["SpO2", "91%", "حرج", "danger"], ["NEWS2", "6", "تصعيد", "danger"]].map((x) => renderKpi(x, x[3] === "danger")).join("")}</div><div class="grid cols-2" style="margin-top:16px">${card("منحنى العلامات الحيوية", renderLineChart())}${card("ملاحظات الجلسة", renderTimelineItems())}</div>`;
+  return `<div class="grid cols-4">${[["ضغط الدم", "92/58", "انخفاض عن الخط الأساسي", "warning"], ["النبض", "112", "صاعد", "warning"], ["SpO2", "91%", "حرج", "danger"], ["NEWS2", "16", "تصعيد", "danger"]].map((x) => renderKpi(x, x[3] === "danger")).join("")}</div><div class="grid cols-2" style="margin-top:16px">${card("منحنى العلامات الحيوية", renderLineChart("منحنى العلامات الحيوية"))}${card("ملاحظات الجلسة", renderTimelineItems())}</div>`;
 }
 
 function renderAssessment() {
-  return `<div class="grid cols-2">${card("مكونات NEWS2", renderTable(["المكون", "القراءة", "النقاط", "التقييم"], [["التنفس", "24", "2", "متوسط"], ["الأكسجين", "91%", "3", "أحمر"], ["الضغط", "118", "0", "مستقر"], ["الوعي", "يقظ", "0", "مستقر"], ["الحرارة", "37.8", "1", "متابعة"]]))}${card("قرار التصعيد", `<div class="kpi-value risk-high">NEWS2 6</div><p class="kpi-meta">تصعيد طبي ومراقبة كل 15 دقيقة.</p>${renderActions()}`)}</div>`;
+  return `<div class="grid cols-2">${card("مكونات NEWS2", renderTable(["المكون", "القراءة", "النقاط", "التقييم"], [["التنفس", "24", "2", "متوسط"], ["الأكسجين", "91%", "3", "حرج"], ["الضغط", "92", "3", "حرج"], ["الوعي", "ارتباك جديد", "3", "حرج"], ["الحرارة", "37.9", "1", "متابعة"]]))}${card("قرار التصعيد", `<div class="kpi-value risk-high">NEWS2 16</div><p class="kpi-meta">تصعيد طبي ومراقبة كل 15 دقيقة.</p>${renderActions()}`)}</div>`;
 }
 
 function renderTrend() {
-  return `<div class="grid cols-3">${renderKpi(["آخر قراءة", "6", "عالية الخطورة", "danger"], true)}${renderKpi(["أعلى قراءة", "7", "خلال 30 يوم", "warning"])}${renderKpi(["متوسط المريض", "3.1", "فوق خط الأساس", "info"])}</div><div style="margin-top:16px">${card("اتجاه NEWS2", renderLineChart())}</div>`;
-}
-
-function renderAlerts() {
-  return `<div class="grid cols-3">${renderKpi(["حرجة", "1", "تصعيد فوري", "danger"], true)}${renderKpi(["متوسطة", "4", "متابعة خلال ساعة", "warning"])}${renderKpi(["منخفضة", "8", "مراقبة روتينية", "success"])}</div><div style="margin-top:16px">${card("التنبيهات النشطة", renderTable(["المعرف", "المريض", "الوقت", "الخطورة", "الحالة"], genericRows.events))}</div>`;
+  return `<div class="grid cols-3">${renderKpi(["آخر قراءة", "16", "عالية الخطورة", "danger"], true)}${renderKpi(["أعلى قراءة", "16", "من بيانات التهيئة", "warning"])}${renderKpi(["متوسط النظام", appState.researchSummary?.averageNews2 ?? "-", "من API", "info"])}</div><div style="margin-top:16px">${card("اتجاه NEWS2", renderLineChart("اتجاه NEWS2"))}</div>`;
 }
 
 function renderTimeline(route) {
-  return `<div class="split"><div>${card(route.label, renderTimelineItems())}</div><aside>${card("مؤشرات زمنية", `${renderKpi(["زمن الاكتشاف", "0 د", "آلي", "success"])}${renderKpi(["زمن التصعيد", "8 د", "ضمن الهدف", "success"])}${renderKpi(["زمن الإغلاق", "65 د", "قيد المتابعة", "warning"])}`)}</aside></div>`;
+  return `<div class="split"><div>${card(route.label, renderTimelineItems())}</div><aside>${card("مؤشرات زمنية", `${renderKpi(["زمن الاكتشاف", "0 د", "آلي", "success"])}${renderKpi(["زمن التصعيد", "9 د", "ضمن الهدف", "success"])}${renderKpi(["زمن الإغلاق", "قيد المتابعة", "لم يغلق بعد", "warning"])}`)}</aside></div>`;
 }
 
 function renderWorkflow(route) {
@@ -347,15 +573,16 @@ function renderWorkflow(route) {
 }
 
 function renderAnalytics(route) {
-  return `<div class="grid cols-4">${kpis.map((item) => renderKpi(item, item[3] === "danger")).join("")}</div><div class="grid cols-2" style="margin-top:16px">${card("تحليل الاتجاهات", renderLineChart())}${card("توزيع المؤشرات", renderBarChart([30, 48, 24, 16, 10]))}</div><div style="margin-top:16px">${card(route.label, renderTable(["المؤشر", "قبل", "بعد", "التحسن"], [["زمن الاستجابة", "18 د", "11 د", "39%"], ["اكتمال التوثيق", "82%", "97%", "15%"], ["التنبيهات المغلقة", "70%", "91%", "21%"]]))}</div>`;
-}
-
-function renderResearch() {
-  return `<div class="dashboard-hero"><div class="hero-band"><h2>لوحة بحثية لقياس أثر الرصد المبكر</h2><p>مؤشرات الدراسة وجودة البيانات والمقارنات قبل وبعد تطبيق NEWS2 في بيئة الغسيل الكلوي.</p></div><div class="status-panel">${renderKpi(["حجم العينة", "1,284", "جلسات موثقة", "info"])}${renderKpi(["اكتمال البيانات", "97%", "جاهز للتحليل", "success"])}</div></div><div class="grid cols-2">${card("اتجاه الدراسة", renderLineChart())}${card("توزيع البيانات", renderBarChart([55, 42, 30, 18]))}</div>`;
+  return `<div class="grid cols-4">${[
+    ["المرضى", appState.researchSummary?.patientsCount ?? "-", "API عند التوفر", "info"],
+    ["الجلسات", appState.researchSummary?.sessionsCount ?? "-", "API عند التوفر", "info"],
+    ["التنبيهات", appState.researchSummary?.alertsCount ?? "-", "API عند التوفر", "warning"],
+    ["المخرجات", appState.researchSummary?.outcomesCount ?? "-", "API عند التوفر", "success"]
+  ].map((item) => renderKpi(item)).join("")}</div><div class="grid cols-2" style="margin-top:16px">${card("تحليل الاتجاهات", renderLineChart("تحليل الاتجاهات"))}${card("توزيع المؤشرات", renderBarChart([30, 48, 24, 16, 10]))}</div><div style="margin-top:16px">${card(route.label, renderTable(["المؤشر", "قبل", "بعد", "التحسن"], [["زمن الاستجابة", "18 د", "9 د", "50%"], ["اكتمال التوثيق", "82%", "97%", "15%"], ["التنبيهات المغلقة", "70%", "91%", "21%"]]))}</div>`;
 }
 
 function renderComparison() {
-  return `<div class="grid cols-3">${renderKpi(["قبل التطبيق", "18 د", "متوسط الاستجابة", "warning"])}${renderKpi(["بعد التطبيق", "11 د", "متوسط الاستجابة", "success"])}${renderKpi(["فرق التحسن", "39%", "دلالة تشغيلية", "success"])}</div><div style="margin-top:16px">${card("مقارنة المؤشرات", renderTable(["المؤشر", "قبل", "بعد", "النتيجة"], [["اكتشاف مبكر", "62%", "88%", "تحسن"], ["تصعيد موثق", "71%", "94%", "تحسن"], ["مخرجات مستقرة", "84%", "91%", "تحسن"]]))}</div>`;
+  return `<div class="grid cols-3">${renderKpi(["قبل التطبيق", "18 د", "متوسط الاستجابة", "warning"])}${renderKpi(["بعد التطبيق", "9 د", "متوسط الاستجابة", "success"])}${renderKpi(["فرق التحسن", "50%", "دلالة تشغيلية", "success"])}</div><div style="margin-top:16px">${card("مقارنة المؤشرات", renderTable(["المؤشر", "قبل", "بعد", "النتيجة"], [["اكتشاف مبكر", "62%", "88%", "تحسن"], ["تصعيد موثق", "71%", "94%", "تحسن"], ["مخرجات مستقرة", "84%", "91%", "تحسن"]]))}</div>`;
 }
 
 function renderExport() {
@@ -383,15 +610,18 @@ function renderActions() {
 }
 
 function renderTimelineItems() {
-  return `<div class="timeline">${timelineItems.map(([time, title, text]) => `<div class="timeline-item"><strong>${time} - ${title}</strong><span>${text}</span></div>`).join("")}</div>`;
+  const items = [["08:30", "ارتفاع NEWS2 إلى 16", "هبوط ضغط مع نقص أكسجة وارتباك جديد."], ["08:35", "تأكيد تمريضي", "إعادة قياس العلامات الحيوية وتثبيت حالة الوصول الوعائي."], ["08:43", "تصعيد طبي", "تقييم الطبيب وتعديل خطة الجلسة ومعدل السحب."], ["09:05", "تحسن تدريجي", "استمرار المراقبة كل 15 دقيقة."]];
+  return `<div class="timeline">${items.map(([time, title, text]) => `<div class="timeline-item"><strong>${time} - ${title}</strong><span>${text}</span></div>`).join("")}</div>`;
 }
 
 function renderBarChart(values) {
-  return `<div class="chart">${values.map((value) => `<div class="bar" style="height:${value + 42}%"></div>`).join("")}</div>`;
+  const max = Math.max(...values, 1);
+  return `<div class="chart" aria-label="مخطط أعمدة للمؤشرات البحثية">${values.map((value) => `<div class="bar" style="height:${Math.max(12, (value / max) * 92)}%"></div>`).join("")}</div>`;
 }
 
-function renderLineChart() {
-  return `<svg class="line-chart" viewBox="0 0 640 230" role="img" aria-label="NEWS2 trend chart">
+function renderLineChart(description = "NEWS2 trend chart") {
+  return `<svg class="line-chart" viewBox="0 0 640 230" role="img" aria-label="${escapeHtml(description)}">
+    <title>${escapeHtml(description)}</title>
     <line x1="28" y1="200" x2="615" y2="200" stroke="#e2e8f0" />
     <line x1="28" y1="40" x2="28" y2="200" stroke="#e2e8f0" />
     <polyline points="40,170 120,150 205,162 285,118 365,132 445,80 540,96 610,58"></polyline>
@@ -400,7 +630,7 @@ function renderLineChart() {
 }
 
 function card(title, body) {
-  return `<article class="card"><div class="card-header"><h2 class="card-title">${title}</h2></div><div class="card-body">${body}</div></article>`;
+  return `<article class="card"><div class="card-header"><h2 class="card-title">${escapeHtml(title)}</h2></div><div class="card-body">${body}</div></article>`;
 }
 
 function render() {
@@ -410,9 +640,12 @@ function render() {
     renderLogin();
     return;
   }
-  renderShell(routes.find((route) => route.id === id) || routes[0]);
+  const route = routes.find((item) => item.id === id) || routes[0];
+  ensureDataForRoute(route);
+  renderShell(route);
 }
 
 window.setRoute = setRoute;
 window.addEventListener("hashchange", render);
+loadHealth();
 render();
