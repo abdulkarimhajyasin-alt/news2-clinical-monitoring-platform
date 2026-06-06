@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
-from app.routers import admin, alerts, deterioration, dialysis_sessions, health, monitoring, news2, outcomes, patients, research, responses
+from app.routers import admin, alerts, deterioration, dialysis_sessions, health, monitoring, news2, outcomes, patients, rbac, research, research_analytics, research_exports, response_tracking, responses, studies
 
 
 settings = get_settings()
@@ -15,15 +15,20 @@ app = FastAPI(
 )
 
 app.include_router(health.router)
+app.include_router(rbac.router)
 app.include_router(patients.router)
 app.include_router(dialysis_sessions.router)
 app.include_router(alerts.router)
 app.include_router(research.router)
+app.include_router(research_exports.router)
+app.include_router(research_analytics.router)
 app.include_router(monitoring.router)
 app.include_router(news2.router)
 app.include_router(deterioration.router)
 app.include_router(responses.router)
+app.include_router(response_tracking.router)
 app.include_router(outcomes.router)
+app.include_router(studies.router)
 app.include_router(admin.router)
 
 static_dir = Path(settings.static_dir)

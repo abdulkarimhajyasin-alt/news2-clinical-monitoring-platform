@@ -40,22 +40,64 @@ const routes = [
   { id: "language-settings", label: "إعدادات اللغة", group: "الإعدادات", icon: "LG", type: "language" }
 ];
 
+routes.splice(
+  routes.findIndex((route) => route.id === "users"),
+  0,
+  { id: "study-management", label: "إدارة الدراسة", group: "البحث", icon: "SG", type: "study" },
+  { id: "research-protocol", label: "بروتوكول البحث", group: "البحث", icon: "RP", type: "study" },
+  { id: "study-timeline", label: "الخط الزمني للدراسة", group: "البحث", icon: "ST", type: "study" },
+  { id: "study-readiness", label: "جاهزية الدراسة", group: "البحث", icon: "SR", type: "study" }
+);
+
 const appState = {
   health: null,
   patients: [],
   dialysisSessions: [],
   alerts: [],
   researchSummary: null,
+  news2Demo: null,
+  monitoringMeasurements: [],
+  news2Assessments: [],
+  monitoringSubmission: null,
+  deteriorationEvents: [],
+  deteriorationSubmission: null,
+  clinicalResponses: [],
+  responseTrackingRecords: [],
+  responseTrackingSummary: null,
+  responseSubmission: null,
+  clinicalOutcomes: [],
+  outcomeSummary: null,
+  outcomeSubmission: null,
+  researchDatasetRows: [],
+  researchDatasetQuality: null,
+  researchExportFilters: {},
+  researchAnalyticsSummary: null,
+  studies: [],
+  selectedStudyId: null,
+  studyReadiness: null,
+  studyCenter: null,
+  studySubmission: null,
+  currentRole: localStorage.getItem("news2DevRole") || "admin",
+  currentRoleLabel: "مدير النظام",
+  permissions: [],
+  permissionMatrix: null,
   loading: {},
   errors: {}
 };
 
 const api = {
-  async request(path) {
+  async request(path, options = {}) {
     try {
-      const response = await fetch(path, { headers: { Accept: "application/json" } });
+      const response = await fetch(path, { headers: { Accept: "application/json", "X-Dev-Role": appState.currentRole || "admin", ...(options.headers || {}) }, ...options });
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        let detail = `HTTP ${response.status}`;
+        try {
+          const payload = await response.json();
+          detail = Array.isArray(payload.detail) ? "تأكد من صحة البيانات المدخلة" : payload.detail || detail;
+        } catch (error) {
+          detail = `HTTP ${response.status}`;
+        }
+        throw new Error(detail);
       }
       return await response.json();
     } catch (error) {
@@ -64,6 +106,12 @@ const api = {
   },
   getHealth() {
     return this.request("/health").then(normalizeHealth);
+  },
+  getCurrentPermissionContext() {
+    return this.request("/api/rbac/me").then(normalizePermissionContext);
+  },
+  getPermissionMatrix() {
+    return this.request("/api/rbac/permissions").then(normalizePermissionMatrix);
   },
   getPatients() {
     return this.request("/api/patients").then((rows) => rows.map(normalizePatient));
@@ -76,6 +124,94 @@ const api = {
   },
   getResearchSummary() {
     return this.request("/api/research/summary").then(normalizeResearchSummary);
+  },
+  calculateNews2(payload) {
+    return this.request("/api/news2/calculate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+  },
+  createMonitoringMeasurement(payload) {
+    return this.request("/api/monitoring/measurements", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+  },
+  getMonitoringMeasurements(filters = {}) {
+    return this.request(`/api/monitoring/measurements${queryString(filters)}`).then((rows) => rows.map(normalizeMeasurement));
+  },
+  getNews2Assessments(filters = {}) {
+    return this.request(`/api/news2/assessments${queryString(filters)}`).then((rows) => rows.map(normalizeNews2Assessment));
+  },
+  getDeteriorationEvents(filters = {}) {
+    return this.request(`/api/deterioration/events${queryString(filters)}`).then((rows) => rows.map(normalizeDeteriorationEvent));
+  },
+  createDeteriorationEvent(payload) {
+    return this.request("/api/deterioration/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+  },
+  getClinicalResponses(filters = {}) {
+    return this.request(`/api/responses${queryString(filters)}`).then((rows) => rows.map(normalizeClinicalResponse));
+  },
+  getResponseTrackingRecords(filters = {}) {
+    return this.request(`/api/response-tracking${queryString(filters)}`).then((rows) => rows.map(normalizeResponseTracking));
+  },
+  getResponseTrackingSummary(filters = {}) {
+    return this.request(`/api/response-tracking/summary${queryString(filters)}`).then(normalizeResponseTrackingSummary);
+  },
+  createClinicalResponse(payload) {
+    return this.request("/api/responses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+  },
+  getClinicalOutcomes(filters = {}) {
+    return this.request(`/api/outcomes${queryString(filters)}`).then((rows) => rows.map(normalizeClinicalOutcome));
+  },
+  getOutcomeSummary() {
+    return this.request("/api/outcomes/summary").then(normalizeOutcomeSummary);
+  },
+  createClinicalOutcome(payload) {
+    return this.request("/api/outcomes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+  },
+  getResearchDataset(filters = {}) {
+    return this.request(`/api/research/dataset${queryString({ limit: 25, ...filters })}`).then((rows) => rows.map(normalizeResearchDatasetRow));
+  },
+  getResearchDatasetQuality(filters = {}) {
+    return this.request(`/api/research/dataset/quality${queryString(filters)}`).then(normalizeResearchDatasetQuality);
+  },
+  getResearchAnalyticsSummary() {
+    return this.request("/api/research/analytics/summary").then(normalizeResearchAnalyticsSummary);
+  },
+  getStudies() {
+    return this.request("/api/studies").then((rows) => rows.map(normalizeStudy));
+  },
+  getStudyReadiness(studyId) {
+    return this.request(`/api/studies/${studyId}/readiness`).then(normalizeStudyReadiness);
+  },
+  createStudy(payload) {
+    return this.request("/api/studies", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(normalizeStudy);
+  },
+  updateStudy(studyId, payload) {
+    return this.request(`/api/studies/${studyId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(normalizeStudy);
   }
 };
 
@@ -113,6 +249,23 @@ function normalizeHealth(data) {
     service: data?.service || "",
     database: data?.database || "unknown",
     connected: data?.status === "ok" && data?.database === "connected"
+  };
+}
+
+function normalizePermissionContext(data) {
+  return {
+    role: data?.role || "admin",
+    roleLabel: data?.role_label || "مدير النظام",
+    permissions: data?.permissions || [],
+    isDevContext: data?.is_dev_context === true
+  };
+}
+
+function normalizePermissionMatrix(data) {
+  return {
+    roles: data?.roles || [],
+    permissions: data?.permissions || [],
+    isDevContext: data?.is_dev_context === true
   };
 }
 
@@ -157,6 +310,10 @@ function normalizeAlert(row) {
   };
 }
 
+function priorityLabel(value) {
+  return label({ normal: "عادي", urgent: "عاجل", immediate: "فوري" }, value);
+}
+
 function normalizeResearchSummary(row) {
   return {
     patientsCount: row?.patients_count ?? 0,
@@ -166,10 +323,290 @@ function normalizeResearchSummary(row) {
     alertsCount: row?.alerts_count ?? 0,
     activeAlertsCount: row?.active_alerts_count ?? 0,
     deteriorationEventsCount: row?.deterioration_events_count ?? 0,
+    acuteHypotensionCount: row?.acute_hypotension_count ?? 0,
+    suspectedSepsisOrFeverCount: row?.suspected_sepsis_or_fever_count ?? 0,
+    arrhythmiaCount: row?.arrhythmia_count ?? 0,
+    seizuresCount: row?.seizures_count ?? 0,
+    reducedConsciousnessCount: row?.reduced_consciousness_count ?? 0,
     responsesCount: row?.responses_count ?? 0,
+    clinicalResponsesCount: row?.clinical_responses_count ?? row?.responses_count ?? 0,
+    averageResponseDelayMinutes: row?.average_response_delay_minutes ?? null,
+    fastestResponseDelayMinutes: row?.fastest_response_delay_minutes ?? null,
+    slowestResponseDelayMinutes: row?.slowest_response_delay_minutes ?? null,
+    averageTimeToAlertMinutes: row?.average_time_to_alert_minutes ?? null,
+    averageTimeToResponseMinutes: row?.average_time_to_response_minutes ?? null,
+    fastestResponseMinutes: row?.fastest_response_minutes ?? null,
+    slowestResponseMinutes: row?.slowest_response_minutes ?? null,
+    alertsWithoutResponseCount: row?.alerts_without_response_count ?? 0,
     outcomesCount: row?.outcomes_count ?? 0,
+    totalOutcomes: row?.total_outcomes ?? row?.outcomes_count ?? 0,
+    stableCompletedSessionCount: row?.stable_completed_session_count ?? 0,
+    sessionStoppedEarlyCount: row?.session_stopped_early_count ?? 0,
+    hospitalAdmissionCount: row?.hospital_admission_count ?? 0,
+    emergencyDepartmentTransferCount: row?.emergency_department_transfer_count ?? 0,
+    icuAdmissionCount: row?.icu_admission_count ?? 0,
+    deathCount: row?.death_count ?? 0,
+    researchDatasetRows: row?.research_dataset_rows ?? 0,
+    datasetQualityScore: row?.dataset_quality_score ?? 0,
+    missingOutcomesCount: row?.missing_outcomes_count ?? 0,
+    exportReadiness: row?.export_readiness ?? "not_ready",
     averageNews2: row?.average_news2 ?? null
   };
+}
+
+function normalizeStudy(row) {
+  return {
+    id: row.id,
+    studyCode: row.study_code || `STUDY-${row.id}`,
+    studyTitle: row.study_title || row.title || "-",
+    studyDescription: row.study_description || row.description || "",
+    principalInvestigator: row.principal_investigator || "-",
+    studyDesign: row.study_design || "observational",
+    studyPhase: row.study_phase || "-",
+    studyStatus: row.study_status || row.status || "draft",
+    studyGroupAName: row.study_group_a_name || "-",
+    studyGroupBName: row.study_group_b_name || "-",
+    baselinePeriodStart: row.baseline_period_start || null,
+    baselinePeriodEnd: row.baseline_period_end || null,
+    interventionPeriodStart: row.intervention_period_start || null,
+    interventionPeriodEnd: row.intervention_period_end || null,
+    studyStartDate: row.study_start_date || null,
+    studyEndDate: row.study_end_date || null,
+    targetSampleSize: row.target_sample_size ?? null,
+    inclusionNotes: row.inclusion_notes || "",
+    exclusionNotes: row.exclusion_notes || "",
+    notes: row.notes || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function normalizeStudyReadiness(row) {
+  return {
+    studyId: row.study_id,
+    readinessScore: row.readiness_score ?? 0,
+    missingRequirements: row.missing_requirements || [],
+    warnings: row.warnings || [],
+    recommendations: row.recommendations || [],
+    checks: row.checks || {},
+    dashboard: row.dashboard || {},
+    protocol: row.protocol || {},
+    timeline: row.timeline || {}
+  };
+}
+
+function normalizeMeasurement(row) {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    dialysisSessionId: row.dialysis_session_id,
+    measurementTime: row.measurement_time,
+    measurementIntervalMinutes: row.measurement_interval_minutes,
+    respiratoryRate: row.respiratory_rate,
+    spo2: row.spo2,
+    oxygenTherapy: row.oxygen_therapy,
+    systolicBp: row.systolic_bp,
+    diastolicBp: row.diastolic_bp,
+    pulseRate: row.pulse_rate,
+    temperature: row.temperature,
+    consciousnessLevel: row.consciousness_level,
+    confusionStatus: row.confusion_status,
+    recordedByUserId: row.recorded_by_user_id,
+    createdAt: row.created_at
+  };
+}
+
+function normalizeNews2Assessment(row) {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    dialysisSessionId: row.dialysis_session_id,
+    measurementId: row.intradialytic_measurement_id,
+    respiratoryScore: row.respiratory_score,
+    spo2Score: row.spo2_score,
+    oxygenScore: row.oxygen_score,
+    systolicBpScore: row.systolic_bp_score,
+    pulseScore: row.pulse_score,
+    temperatureScore: row.temperature_score,
+    consciousnessScore: row.consciousness_score,
+    totalScore: row.total_score,
+    riskLevel: row.risk_level,
+    alertRequired: row.alert_required,
+    singleParameterTrigger: row.single_parameter_trigger,
+    triggerReason: row.trigger_reason,
+    createdAt: row.created_at
+  };
+}
+
+function normalizeDeteriorationEvent(row) {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    patientCode: row.patient_code || `ID ${row.patient_id}`,
+    dialysisSessionId: row.dialysis_session_id,
+    sessionDate: row.session_date,
+    news2AssessmentId: row.news2_assessment_id,
+    news2TotalScore: row.news2_total_score,
+    alertId: row.alert_id,
+    alertStatus: row.alert_status,
+    riskLevel: row.risk_level,
+    deteriorationTime: row.deterioration_time,
+    timeFromSessionStartMinutes: row.time_from_session_start_minutes,
+    deteriorationType: row.deterioration_type,
+    triggeringNews2Score: row.triggering_news2_score,
+    description: row.description,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function normalizeClinicalResponse(row) {
+  return {
+    id: row.id,
+    clinicalDeteriorationEventId: row.clinical_deterioration_event_id,
+    alertId: row.alert_id,
+    patientId: row.patient_id,
+    patientCode: row.patient_code || `ID ${row.patient_id}`,
+    dialysisSessionId: row.dialysis_session_id,
+    sessionDate: row.session_date,
+    news2TotalScore: row.news2_total_score,
+    deteriorationType: row.deterioration_type,
+    digitalAlertTime: row.digital_alert_time,
+    actualResponseStartTime: row.actual_response_start_time,
+    responseDelayMinutes: row.response_delay_minutes,
+    patientActions: row.patient_actions || [],
+    vascularAccessActions: row.vascular_access_actions || [],
+    respondedByUserId: row.responded_by_user_id,
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function normalizeResponseTracking(row) {
+  return {
+    id: row.id,
+    alertId: row.alert_id,
+    patientId: row.patient_id,
+    patientCode: row.patient_code || `ID ${row.patient_id}`,
+    dialysisSessionId: row.dialysis_session_id,
+    sessionDate: row.session_date,
+    news2AssessmentId: row.news2_assessment_id,
+    news2TotalScore: row.news2_total_score,
+    riskLevel: row.risk_level,
+    clinicalDeteriorationEventId: row.clinical_deterioration_event_id,
+    deteriorationType: row.deterioration_type,
+    deteriorationEventCreatedAt: row.deterioration_event_created_at,
+    vitalSignsRecordedAt: row.vital_signs_recorded_at,
+    alertCreatedAt: row.alert_created_at,
+    alertViewedAt: row.alert_viewed_at,
+    actualResponseStartTime: row.actual_response_start_time,
+    clinicalActionAt: row.clinical_action_at,
+    alertClosedAt: row.alert_closed_at,
+    timeToAlertMinutes: row.time_to_alert_minutes,
+    timeToViewMinutes: row.time_to_view_minutes,
+    timeToResponseMinutes: row.time_to_response_minutes,
+    timeToActionMinutes: row.time_to_action_minutes,
+    totalResponseTimeMinutes: row.total_response_time_minutes,
+    warnings: row.warnings || [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function normalizeResponseTrackingSummary(row) {
+  return {
+    recordsCount: row?.records_count ?? 0,
+    averageTimeToAlertMinutes: row?.average_time_to_alert_minutes ?? null,
+    averageTimeToViewMinutes: row?.average_time_to_view_minutes ?? null,
+    averageTimeToResponseMinutes: row?.average_time_to_response_minutes ?? null,
+    averageTimeToActionMinutes: row?.average_time_to_action_minutes ?? null,
+    averageTotalResponseTimeMinutes: row?.average_total_response_time_minutes ?? null,
+    fastestResponseMinutes: row?.fastest_response_minutes ?? null,
+    slowestResponseMinutes: row?.slowest_response_minutes ?? null,
+    alertsWithoutResponseCount: row?.alerts_without_response_count ?? 0
+  };
+}
+
+function normalizeClinicalOutcome(row) {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    patientCode: row.patient_code || `ID ${row.patient_id}`,
+    dialysisSessionId: row.dialysis_session_id,
+    sessionDate: row.session_date,
+    clinicalDeteriorationEventId: row.clinical_deterioration_event_id,
+    alertId: row.alert_id,
+    news2AssessmentId: row.news2_assessment_id,
+    news2TotalScore: row.news2_total_score,
+    deteriorationType: row.deterioration_type,
+    outcomeType: row.outcome_type,
+    outcomeRecordedAt: row.outcome_recorded_at,
+    outcomeWindowHours: row.outcome_window_hours,
+    description: row.description,
+    recordedByUserId: row.recorded_by_user_id,
+    createdAt: row.created_at
+  };
+}
+
+function normalizeOutcomeSummary(row) {
+  return {
+    totalOutcomes: row?.total_outcomes ?? 0,
+    stableCompletedSessionCount: row?.stable_completed_session_count ?? 0,
+    sessionStoppedEarlyCount: row?.session_stopped_early_count ?? 0,
+    hospitalAdmissionCount: row?.hospital_admission_count ?? 0,
+    emergencyDepartmentTransferCount: row?.emergency_department_transfer_count ?? 0,
+    icuAdmissionCount: row?.icu_admission_count ?? 0,
+    deathCount: row?.death_count ?? 0
+  };
+}
+
+function normalizeResearchDatasetRow(row) {
+  return {
+    patientCode: row.patient_code || "-",
+    sessionDate: row.session_date || "-",
+    measurementTime: row.measurement_time || null,
+    news2TotalScore: row.news2_total_score ?? "-",
+    riskLevel: row.risk_level || "-",
+    alertCreated: Boolean(row.alert_created),
+    deteriorationType: row.deterioration_type || "-",
+    responseDelayMinutes: row.response_delay_minutes ?? null,
+    outcomeType: row.outcome_type || "-",
+    studyPhase: row.study_phase || "-",
+    studyGroup: row.study_group || "-"
+  };
+}
+
+function normalizeResearchDatasetQuality(row) {
+  return {
+    qualityScore: row?.quality_score ?? 0,
+    totalRows: row?.total_rows ?? 0,
+    issuesCount: row?.issues_count ?? 0,
+    issuesByType: row?.issues_by_type || {},
+    warnings: row?.warnings || [],
+    statistics: row?.statistics || {}
+  };
+}
+
+function normalizeResearchAnalyticsSummary(row) {
+  return {
+    kpis: row?.kpis || {},
+    news2Distribution: row?.news2_distribution || [],
+    riskLevelDistribution: row?.risk_level_distribution || [],
+    outcomeAnalysis: row?.outcome_analysis || {},
+    responseTimeAnalysis: row?.response_time_analysis || {},
+    deteriorationAnalysis: row?.deterioration_analysis || [],
+    groupComparison: row?.group_comparison || {}
+  };
+}
+
+function queryString(filters) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") params.set(key, value);
+  });
+  const value = params.toString();
+  return value ? `?${value}` : "";
 }
 
 const labels = {
@@ -177,8 +614,73 @@ const labels = {
   studyPhase: { pre_implementation: "قبل التطبيق", post_implementation: "بعد التطبيق" },
   studyGroup: { control: "ضابطة", intervention: "تدخل" },
   gender: { male: "ذكر", female: "أنثى" },
-  status: { new: "جديد", viewed: "تمت المشاهدة", acknowledged: "تم التأكيد", in_progress: "قيد التنفيذ", closed: "مغلق", cancelled: "ملغى" },
-  sessionStatus: { scheduled: "مجدولة", active: "نشطة", completed: "مكتملة", cancelled: "ملغاة" }
+  status: { new: "جديد", viewed: "تمت المشاهدة", acknowledged: "تم التأكيد", in_progress: "قيد المعالجة", closed: "مغلق", cancelled: "ملغى" },
+  sessionStatus: { scheduled: "مجدولة", active: "نشطة", completed: "مكتملة", cancelled: "ملغاة" },
+  consciousness: { alert: "يقظ", voice: "يستجيب للصوت", pain: "يستجيب للألم", unresponsive: "لا يستجيب", new_confusion: "ارتباك حديث" },
+  trigger: {
+    "NEWS2 total score below alert threshold": "درجة NEWS2 أقل من عتبة التنبيه",
+    "NEWS2 total score requires clinical alert": "درجة NEWS2 تتطلب تنبيها سريريا",
+    "Single parameter scored 3": "مؤشر واحد سجل 3 نقاط"
+  },
+  deteriorationType: {
+    acute_hypotension: "هبوط ضغط حاد",
+    suspected_sepsis_or_fever: "اشتباه إنتان / حرارة",
+    arrhythmia: "اضطراب نظم القلب",
+    seizures: "تشنجات",
+    reduced_consciousness: "انخفاض الوعي",
+    other: "أخرى"
+  },
+  patientAction: {
+    stop_ultrafiltration: "إيقاف سحب السوائل",
+    give_fluids: "إعطاء محاليل",
+    give_oxygen: "إعطاء أوكسجين",
+    position_adjustment: "تعديل وضعية المريض",
+    medication_given: "إعطاء دواء",
+    doctor_called: "استدعاء الطبيب",
+    transfer_prepared: "تجهيز النقل",
+    other: "أخرى"
+  },
+  vascularAction: {
+    check_flow: "فحص التدفق",
+    inspect_access_site: "فحص موضع الوصلة",
+    blood_culture_from_catheter: "سحب مزرعة دم من القسطرة",
+    catheter_evaluation: "تقييم القسطرة",
+    other: "أخرى"
+  },
+  outcomeType: {
+    stable_completed_session: "استقرار واستكمال الجلسة",
+    session_stopped_early: "إيقاف الجلسة مبكرا",
+    hospital_admission: "إدخال إلى المستشفى",
+    emergency_department_transfer: "تحويل إلى الطوارئ",
+    icu_admission: "دخول العناية المركزة",
+    death: "وفاة"
+  }
+};
+
+labels.studyStatus = {
+  draft: "مسودة",
+  active: "نشطة",
+  paused: "متوقفة مؤقتا",
+  completed: "مكتملة",
+  archived: "مؤرشفة"
+};
+
+labels.studyDesign = {
+  observational: "رصدية",
+  prospective: "استباقية",
+  retrospective: "استرجاعية",
+  before_after: "قبل وبعد",
+  cohort: "أترابية",
+  pilot: "تجريبية أولية"
+};
+
+labels.readinessCheck = {
+  study_defined: "تعريف الدراسة",
+  dataset_available: "Dataset جاهز",
+  analytics_available: "التحليلات جاهزة",
+  exports_available: "التصدير جاهز",
+  outcomes_available: "المآلات جاهزة",
+  response_tracking_available: "تتبع الاستجابة جاهز"
 };
 
 function label(map, value) {
@@ -194,6 +696,10 @@ function riskTone(value) {
   if (value === "medium" || value === "متوسط") return "warning";
   if (value === "low" || value === "منخفض") return "success";
   return "neutral";
+}
+
+function hasPermission(permission) {
+  return (appState.permissions || []).includes(permission);
 }
 
 function currentRoute() {
@@ -243,6 +749,17 @@ function emptyBlock(text) {
   return `<div class="state-message empty"><strong>${escapeHtml(text)}</strong><span>ستظهر البيانات هنا بعد تهيئة قاعدة البيانات أو توفر سجلات جديدة.</span></div>`;
 }
 
+function renderDevRoleSwitcher() {
+  const roles = [
+    ["admin", "مدير"],
+    ["doctor", "طبيب"],
+    ["on_call_doctor", "مناوب"],
+    ["nurse", "تمريض"],
+    ["researcher", "باحث"]
+  ];
+  return `<label class="dev-role-switcher" title="وضع الدور التجريبي مؤقت حتى مرحلة المصادقة"><span>الدور</span><select onchange="changeDevRole(this.value)">${roles.map(([value, text]) => `<option value="${value}" ${appState.currentRole === value ? "selected" : ""}>${text}</option>`).join("")}</select></label>`;
+}
+
 function setLoading(key, value) {
   appState.loading[key] = value;
 }
@@ -272,6 +789,34 @@ async function loadHealth() {
   render();
 }
 
+async function loadRbacContext() {
+  try {
+    const context = await api.getCurrentPermissionContext();
+    appState.currentRole = context.role;
+    appState.currentRoleLabel = context.roleLabel;
+    appState.permissions = context.permissions;
+    appState.errors.rbac = null;
+  } catch (error) {
+    appState.permissions = [];
+    appState.errors.rbac = error.message;
+  }
+  try {
+    appState.permissionMatrix = await api.getPermissionMatrix();
+  } catch (error) {
+    appState.errors.permissionMatrix = error.message;
+  }
+  render();
+}
+
+async function loadStudyCenter() {
+  const studies = await api.getStudies();
+  appState.studies = studies;
+  const selected = studies.find((study) => study.id === appState.selectedStudyId) || studies[0];
+  appState.selectedStudyId = selected?.id || null;
+  appState.studyReadiness = selected ? await api.getStudyReadiness(selected.id) : null;
+  return { loaded: true, studiesCount: studies.length, selectedStudyId: appState.selectedStudyId };
+}
+
 function ensureDataForRoute(route) {
   if (route.id === "dashboard") {
     if (!appState.researchSummary && !appState.loading.researchSummary) loadResource("researchSummary", api.getResearchSummary.bind(api));
@@ -283,6 +828,33 @@ function ensureDataForRoute(route) {
   if (route.type === "sessions" && !appState.dialysisSessions.length && !appState.loading.dialysisSessions) loadResource("dialysisSessions", api.getDialysisSessions.bind(api));
   if (route.type === "alerts" && !appState.alerts.length && !appState.loading.alerts) loadResource("alerts", api.getAlerts.bind(api));
   if (route.type === "research" && !appState.researchSummary && !appState.loading.researchSummary) loadResource("researchSummary", api.getResearchSummary.bind(api));
+  if (route.id === "vital-signs-entry") {
+    if (!appState.patients.length && !appState.loading.patients) loadResource("patients", api.getPatients.bind(api));
+    if (!appState.dialysisSessions.length && !appState.loading.dialysisSessions) loadResource("dialysisSessions", api.getDialysisSessions.bind(api));
+  }
+  if (route.id === "intradialytic-monitoring" && !appState.monitoringMeasurements.length && !appState.loading.monitoringMeasurements) loadResource("monitoringMeasurements", api.getMonitoringMeasurements.bind(api));
+  if (route.id === "news2-history" && !appState.news2Assessments.length && !appState.loading.news2Assessments) loadResource("news2Assessments", api.getNews2Assessments.bind(api));
+  if (["deterioration-events", "event-details", "event-timeline"].includes(route.id) && !appState.deteriorationEvents.length && !appState.loading.deteriorationEvents) loadResource("deteriorationEvents", api.getDeteriorationEvents.bind(api));
+  if (["medical-response-log", "nursing-response-log", "response-workflow"].includes(route.id) && !appState.clinicalResponses.length && !appState.loading.clinicalResponses) loadResource("clinicalResponses", api.getClinicalResponses.bind(api));
+  if (["response-time-dashboard", "response-analytics", "response-workflow"].includes(route.id)) {
+    if (!appState.responseTrackingRecords.length && !appState.loading.responseTrackingRecords) loadResource("responseTrackingRecords", api.getResponseTrackingRecords.bind(api));
+    if (!appState.responseTrackingSummary && !appState.loading.responseTrackingSummary) loadResource("responseTrackingSummary", api.getResponseTrackingSummary.bind(api));
+  }
+  if (["clinical-outcomes", "outcome-tracking", "outcome-analytics"].includes(route.id)) {
+    if (!appState.clinicalOutcomes.length && !appState.loading.clinicalOutcomes) loadResource("clinicalOutcomes", api.getClinicalOutcomes.bind(api));
+    if (!appState.outcomeSummary && !appState.loading.outcomeSummary) loadResource("outcomeSummary", api.getOutcomeSummary.bind(api));
+    if (!appState.deteriorationEvents.length && !appState.loading.deteriorationEvents) loadResource("deteriorationEvents", api.getDeteriorationEvents.bind(api));
+  }
+  if (["export-center", "dataset-statistics"].includes(route.id)) {
+    if (!appState.researchDatasetRows.length && !appState.loading.researchDatasetRows) loadResource("researchDatasetRows", () => api.getResearchDataset(appState.researchExportFilters));
+    if (!appState.researchDatasetQuality && !appState.loading.researchDatasetQuality) loadResource("researchDatasetQuality", () => api.getResearchDatasetQuality(appState.researchExportFilters));
+  }
+  if (route.id === "study-metrics" && !appState.researchAnalyticsSummary && !appState.loading.researchAnalyticsSummary) {
+    loadResource("researchAnalyticsSummary", api.getResearchAnalyticsSummary.bind(api));
+  }
+  if (route.type === "study" && !appState.studyCenter && !appState.loading.studyCenter) {
+    loadResource("studyCenter", loadStudyCenter);
+  }
 }
 
 function renderLogin() {
@@ -337,6 +909,7 @@ function renderShell(route) {
           </div>
           <div class="top-actions">
             ${healthBadge()}
+            ${renderDevRoleSwitcher()}
             ${badge("RTL", "info")}
             <button class="icon-btn" aria-label="عرض التنبيهات" title="التنبيهات" onclick="setRoute('active-alerts')">!</button>
             <button class="btn" onclick="setRoute('login')">خروج</button>
@@ -368,6 +941,7 @@ function renderScreen(route) {
     analytics: () => renderAnalytics(route),
     comparison: renderComparison,
     export: renderExport,
+    study: () => renderStudyCenter(route),
     permissions: renderPermissions,
     settings: renderSettings,
     language: renderLanguage
@@ -379,7 +953,10 @@ function renderDashboard() {
   if (appState.loading.researchSummary && !appState.researchSummary) return loadingBlock("جاري تحميل البيانات السريرية...");
   const summary = appState.researchSummary || {};
   const alerts = appState.alerts || [];
-  const criticalAlerts = alerts.filter((item) => item.riskLevel === "critical" || item.severityLevel === "critical").length;
+  const activeAlerts = alerts.filter((item) => !["closed", "cancelled"].includes(item.status)).length;
+  const highRiskAlerts = alerts.filter((item) => ["high", "critical"].includes(item.riskLevel) || ["high", "critical"].includes(item.severityLevel)).length;
+  const mediumRiskAlerts = alerts.filter((item) => item.riskLevel === "medium" || item.severityLevel === "medium").length;
+  const closedAlerts = alerts.filter((item) => item.status === "closed").length;
   const latestAlerts = alerts.slice(0, 5).map(alertRow);
   return `
     ${appState.errors.researchSummary ? errorBlock("researchSummary") : ""}
@@ -390,14 +967,16 @@ function renderDashboard() {
       </div>
       <div class="status-panel">
         ${renderKpi(["حالة الخادم", appState.health?.connected ? "متصل" : "غير متصل", "فحص /health", appState.health?.connected ? "success" : "warning"])}
-        ${renderKpi(["تنبيهات حرجة", String(criticalAlerts), "من بيانات التنبيهات", criticalAlerts > 0 ? "danger" : "success"], criticalAlerts > 0)}
+        ${renderKpi(["تنبيهات عالية الخطورة", String(highRiskAlerts), "من بيانات التنبيهات", highRiskAlerts > 0 ? "danger" : "success"], highRiskAlerts > 0)}
       </div>
     </div>
     <div class="grid cols-4">
       ${renderKpi(["إجمالي المرضى", summary.patientsCount ?? appState.patients.length, "من /api/patients", "info"])}
-      ${renderKpi(["جلسات الغسيل", summary.sessionsCount ?? appState.dialysisSessions.length, "من /api/dialysis-sessions", "info"])}
-      ${renderKpi(["التنبيهات النشطة", summary.activeAlertsCount ?? alerts.length, "من /api/alerts", alerts.length ? "warning" : "success"])}
-      ${renderKpi(["متوسط NEWS2", summary.averageNews2 ?? "-", "من الملخص البحثي", (summary.averageNews2 || 0) >= 5 ? "danger" : "success"], (summary.averageNews2 || 0) >= 5)}
+      ${renderKpi(["التنبيهات النشطة", activeAlerts, "من /api/alerts", activeAlerts ? "warning" : "success"])}
+      ${renderKpi(["تنبيهات متوسطة", mediumRiskAlerts, "فرز سريري", mediumRiskAlerts ? "warning" : "success"])}
+      ${renderKpi(["تنبيهات مغلقة", closedAlerts, "مكتملة", "success"])}
+      ${renderKpi(["أحداث التدهور", summary.deteriorationEventsCount ?? 0, "من /api/deterioration/events", (summary.deteriorationEventsCount || 0) ? "warning" : "success"])}
+      ${renderKpi(["الاستجابات المسجلة", summary.clinicalResponsesCount ?? 0, `متوسط البدء ${summary.averageResponseDelayMinutes ?? "-"} د`, "info"])}
     </div>
     <div class="grid cols-2" style="margin-top:16px">
       ${card("منحنى NEWS2 اليوم", renderLineChart("اتجاه NEWS2 تجريبي لحين توفير endpoint للاتجاهات"))}
@@ -451,14 +1030,43 @@ function renderAlerts() {
   if (appState.loading.alerts) return tableSkeleton("جاري تحميل التنبيهات...");
   if (appState.errors.alerts) return errorBlock("alerts");
   if (!appState.alerts.length) return emptyBlock("لا توجد تنبيهات نشطة");
-  const critical = appState.alerts.filter((item) => item.riskLevel === "critical").length;
+  const high = appState.alerts.filter((item) => item.riskLevel === "high" || item.severityLevel === "high" || item.riskLevel === "critical" || item.severityLevel === "critical").length;
+  const medium = appState.alerts.filter((item) => item.riskLevel === "medium" || item.severityLevel === "medium").length;
   return `
     <div class="grid cols-3">
-      ${renderKpi(["حرجة", critical, "تحتاج تصعيد فوري", critical ? "danger" : "success"], critical > 0)}
+      ${renderKpi(["عالية الخطورة", high, "تحتاج تصعيد", high ? "danger" : "success"], high > 0)}
       ${renderKpi(["إجمالي التنبيهات", appState.alerts.length, "من قاعدة البيانات", "info"])}
-      ${renderKpi(["قيد المتابعة", appState.alerts.filter((a) => a.status !== "closed").length, "غير مغلقة", "warning"])}
+      ${renderKpi(["متوسطة", medium, "مراقبة سريرية", medium ? "warning" : "success"])}
     </div>
-    <div style="margin-top:16px">${card("التنبيهات النشطة", renderTable(["المعرف", "رمز المريض", "مستوى الخطر", "الشدة", "الحالة", "الأولوية", "سبب التنبيه", "وقت الإنشاء"], appState.alerts.map(alertFullRow)))}</div>`;
+    <div class="grid cols-2" style="margin-top:16px">
+      ${card("فتح سجل تدهور سريري", renderDeteriorationEventForm())}
+      ${card("نتيجة فتح السجل", renderDeteriorationSubmission())}
+    </div>
+    <div style="margin-top:16px">${card("التنبيهات النشطة", renderTable(["المعرف", "رمز المريض", "مستوى الخطر", "الشدة", "الأولوية", "الحالة", "وقت الإنشاء", "سبب التنبيه"], appState.alerts.map(alertFullRow)))}</div>`;
+}
+
+function renderDeteriorationEventForm() {
+  const activeAlerts = appState.alerts.filter((alert) => !["closed", "cancelled"].includes(alert.status));
+  if (!activeAlerts.length) return `<p class="kpi-meta">لا توجد تنبيهات نشطة متاحة لفتح سجل تدهور سريري.</p>`;
+  const alertOptions = activeAlerts.map((alert) => `<option value="${alert.id}">#${alert.id} - ${escapeHtml(alert.patientCode)} - ${escapeHtml(riskLevelLabel(alert.riskLevel))}</option>`).join("");
+  return `<form class="form-grid" onsubmit="submitDeteriorationEvent(event)">
+    <div class="field"><label>التنبيه المرتبط</label><select name="alert_id" required>${alertOptions}</select></div>
+    <div class="field"><label>وقت التدهور</label><input name="deterioration_time" type="datetime-local" value="${defaultMeasurementTime()}" required></div>
+    <div class="field full"><label>نوع التدهور</label><select name="deterioration_type">${Object.entries(labels.deteriorationType).map(([value, text]) => `<option value="${value}">${text}</option>`).join("")}</select></div>
+    <div class="field full"><label>وصف الحالة</label><textarea name="description" placeholder="وصف سريري مختصر للحالة"></textarea></div>
+    <input name="created_by_user_id" type="hidden" value="2">
+    <div class="footer-actions full"><button class="btn primary" type="submit" ${appState.loading.deteriorationSubmission ? "disabled" : ""}>${appState.loading.deteriorationSubmission ? "جاري الحفظ..." : "حفظ حدث التدهور"}</button></div>
+  </form>`;
+}
+
+function renderDeteriorationSubmission() {
+  if (appState.errors.deteriorationSubmission) {
+    return `<div class="state-message error" role="alert"><strong>تعذر إنشاء حدث التدهور</strong><span>${escapeHtml(appState.errors.deteriorationSubmission)}</span></div>`;
+  }
+  const result = appState.deteriorationSubmission;
+  if (!result) return `<p class="kpi-meta">اختر تنبيها نشطا وافتح سجل تدهور سريري عند الحاجة. لا يتم إنشاء سجل استجابة في هذه المرحلة.</p>`;
+  const event = normalizeDeteriorationEvent(result.event);
+  return `<div class="state-message empty"><strong>${result.event_created ? "تم إنشاء حدث التدهور السريري بنجاح" : "يوجد حدث تدهور مسجل مسبقا لهذا التنبيه"}</strong><span>حدث #${event.id} - ${escapeHtml(label(labels.deteriorationType, event.deteriorationType))}</span></div>`;
 }
 
 function renderResearch() {
@@ -486,6 +1094,10 @@ function renderResearch() {
       ${renderKpi(["الاستجابات", s.responsesCount, "إجراءات سريرية", "info"])}
       ${renderKpi(["المخرجات", s.outcomesCount, "خلال 24-72 ساعة", "success"])}
       ${renderKpi(["تقييمات NEWS2", s.news2AssessmentsCount, "تقييمات مخزنة", "info"])}
+      ${renderKpi(["سجلات Dataset البحثية", s.researchDatasetRows ?? 0, "جاهزة للتصدير", "info"])}
+      ${renderKpi(["درجة جودة البيانات", `${s.datasetQualityScore ?? 0}%`, s.exportReadiness || "needs_review", (s.datasetQualityScore || 0) >= 80 ? "success" : "warning"])}
+      ${renderKpi(["مآلات مفقودة", s.missingOutcomesCount ?? 0, "فحص الجودة", (s.missingOutcomesCount || 0) ? "warning" : "success"])}
+      ${renderKpi(["جاهزية التصدير", s.exportReadiness || "not_ready", "Phase 11", s.exportReadiness === "ready" ? "success" : "warning"])}
     </div>
     <div class="grid cols-2" style="margin-top:16px">
       ${card("توزيع البيانات", renderBarChart([s.patientsCount, s.sessionsCount, s.measurementsCount, s.news2AssessmentsCount, s.alertsCount, s.outcomesCount]))}
@@ -494,11 +1106,11 @@ function renderResearch() {
 }
 
 function alertRow(alert) {
-  return [alert.id, alert.patientCode, badge(riskLevelLabel(alert.riskLevel), riskTone(alert.riskLevel), alert.riskLevel === "critical"), label(labels.status, alert.status), formatDateTime(alert.createdAt)];
+  return [alert.id, alert.patientCode, badge(riskLevelLabel(alert.riskLevel), riskTone(alert.riskLevel), alert.riskLevel === "critical" || alert.riskLevel === "high"), label(labels.status, alert.status), formatDateTime(alert.createdAt)];
 }
 
 function alertFullRow(alert) {
-  return [alert.id, alert.patientCode, badge(riskLevelLabel(alert.riskLevel), riskTone(alert.riskLevel), alert.riskLevel === "critical"), badge(riskLevelLabel(alert.severityLevel), riskTone(alert.severityLevel), alert.severityLevel === "critical"), label(labels.status, alert.status), alert.priority, alert.triggerReason, formatDateTime(alert.createdAt)];
+  return [alert.id, alert.patientCode, badge(riskLevelLabel(alert.riskLevel), riskTone(alert.riskLevel), alert.riskLevel === "critical" || alert.riskLevel === "high"), badge(riskLevelLabel(alert.severityLevel), riskTone(alert.severityLevel), alert.severityLevel === "critical" || alert.severityLevel === "high"), priorityLabel(alert.priority), label(labels.status, alert.status), formatDateTime(alert.createdAt), alert.triggerReason];
 }
 
 function renderKpi(item, critical = false) {
@@ -507,8 +1119,110 @@ function renderKpi(item, critical = false) {
 }
 
 function renderStaticTable(route) {
+  if (route.entity === "roles") {
+    return renderRolesMatrix();
+  }
+  if (route.entity === "medical" || route.entity === "nursing") {
+    return renderClinicalResponseLog(route.entity);
+  }
+  if (route.entity === "events") {
+    return renderDeteriorationEvents();
+  }
+  if (route.entity === "outcomes") {
+    return renderClinicalOutcomes();
+  }
+  if (route.entity === "news2") {
+    if (appState.loading.news2Assessments) return tableSkeleton("جاري تحميل سجل NEWS2...");
+    if (appState.errors.news2Assessments) return errorBlock("news2Assessments");
+    if (appState.news2Assessments.length) {
+      const rows = appState.news2Assessments.map((item) => [
+        item.id,
+        item.patientId,
+        item.dialysisSessionId,
+        item.totalScore,
+        badge(riskLevelLabel(item.riskLevel), riskTone(item.riskLevel), item.alertRequired),
+        item.alertRequired ? "يتطلب تنبيها" : "دون عتبة التنبيه",
+        formatDateTime(item.createdAt)
+      ]);
+      return card("سجل NEWS2", renderTable(["المعرف", "المريض", "الجلسة", "الدرجة", "الخطورة", "الحالة", "وقت الإنشاء"], rows));
+    }
+  }
   const rows = fallbackRows[route.entity] || fallbackRows.events;
   return `<div class="grid cols-3">${renderKpi(["إجمالي السجلات", rows.length, "بيانات مؤقتة حتى إضافة endpoint", "info"])}${renderKpi(["جاهزية التكامل", "جزئية", "سيتم ربطها لاحقا", "warning"])}${renderKpi(["حالة الشاشة", "تعمل", "hash routing محفوظ", "success"])}</div><div style="margin-top:16px">${card(route.label, renderTable(["المعرف", "المرجع", "الوقت", "الحالة", "المؤشر"], rows))}</div>`;
+}
+
+function renderDeteriorationEvents() {
+  if (appState.loading.deteriorationEvents) return tableSkeleton("جاري تحميل سجل التدهور السريري...");
+  if (appState.errors.deteriorationEvents) return errorBlock("deteriorationEvents");
+  if (!appState.deteriorationEvents.length) return emptyBlock("لا توجد أحداث تدهور سريري مسجلة");
+  const rows = appState.deteriorationEvents.map((event) => [
+    event.id,
+    event.patientCode,
+    event.alertId,
+    event.news2TotalScore,
+    badge(riskLevelLabel(event.riskLevel), riskTone(event.riskLevel), event.riskLevel === "high" || event.riskLevel === "critical"),
+    label(labels.deteriorationType, event.deteriorationType),
+    formatDateTime(event.deteriorationTime),
+    event.timeFromSessionStartMinutes ?? "-"
+  ]);
+  return `<div class="grid cols-3">${renderKpi(["إجمالي الأحداث", appState.deteriorationEvents.length, "من /api/deterioration/events", "info"])}${renderKpi(["هبوط ضغط", appState.deteriorationEvents.filter((event) => event.deteriorationType === "acute_hypotension").length, "تصنيف سريري", "warning"])}${renderKpi(["قيد المتابعة", appState.deteriorationEvents.filter((event) => event.alertStatus !== "closed").length, "حسب حالة التنبيه", "warning"])}</div><div style="margin-top:16px">${card("سجل التدهور السريري", renderTable(["المعرف", "المريض", "التنبيه", "NEWS2", "الخطورة", "نوع التدهور", "وقت التدهور", "من بداية الجلسة"], rows))}</div>`;
+}
+
+function renderClinicalOutcomes() {
+  if (appState.loading.clinicalOutcomes || appState.loading.outcomeSummary) return tableSkeleton("جاري تحميل المآلات السريرية...");
+  if (appState.errors.clinicalOutcomes) return errorBlock("clinicalOutcomes");
+  const summary = appState.outcomeSummary || {};
+  const rows = appState.clinicalOutcomes.map(outcomeRow);
+  return `<div class="grid cols-3">
+    ${renderKpi(["إجمالي المآلات", summary.totalOutcomes ?? appState.clinicalOutcomes.length, "من /api/outcomes", "info"])}
+    ${renderKpi(["استقرار واستكمال الجلسة", summary.stableCompletedSessionCount ?? 0, "24-72 ساعة", "success"])}
+    ${renderKpi(["إدخال إلى المستشفى", summary.hospitalAdmissionCount ?? 0, "مؤشر بحثي", (summary.hospitalAdmissionCount || 0) ? "warning" : "success"])}
+  </div>
+  <div class="grid cols-2" style="margin-top:16px">
+    ${card("تسجيل المآل السريري", renderOutcomeForm())}
+    ${card("نتيجة التسجيل", renderOutcomeSubmission())}
+  </div>
+  <div style="margin-top:16px">${card("متابعة المآلات", rows.length ? renderTable(["المعرف", "المريض", "تاريخ الجلسة", "التنبيه", "NEWS2", "نوع التدهور", "نوع المآل", "الفترة", "المسجل", "وقت التسجيل"], rows) : emptyBlock("لا توجد مآلات سريرية مسجلة حتى الآن"))}</div>`;
+}
+
+function outcomeRow(outcome) {
+  return [
+    outcome.id,
+    outcome.patientCode,
+    outcome.sessionDate || "-",
+    outcome.alertId ? `#${outcome.alertId}` : "-",
+    outcome.news2TotalScore ?? "-",
+    label(labels.deteriorationType, outcome.deteriorationType),
+    label(labels.outcomeType, outcome.outcomeType),
+    `${outcome.outcomeWindowHours} ساعة`,
+    outcome.recordedByUserId ?? "-",
+    formatDateTime(outcome.createdAt)
+  ];
+}
+
+function renderOutcomeForm() {
+  const events = appState.deteriorationEvents || [];
+  if (appState.loading.deteriorationEvents) return loadingBlock("جاري تحميل أحداث التدهور المرتبطة...");
+  if (!events.length) return `<p class="kpi-meta">لا توجد أحداث تدهور متاحة لتسجيل مآل سريري.</p>`;
+  const eventOptions = events.map((event) => `<option value="${event.id}">#${event.id} - ${escapeHtml(event.patientCode)} - NEWS2 ${escapeHtml(event.news2TotalScore ?? "-")}</option>`).join("");
+  return `<form class="form-grid" onsubmit="submitClinicalOutcome(event)">
+    <div class="field full"><label>حدث التدهور المرتبط</label><select name="clinical_deterioration_event_id" required>${eventOptions}</select></div>
+    <div class="field"><label>نوع المآل</label><select name="outcome_type" required>${Object.entries(labels.outcomeType).map(([value, text]) => `<option value="${value}">${text}</option>`).join("")}</select></div>
+    <div class="field"><label>الفترة الزمنية</label><select name="outcome_window_hours" required><option value="24">24 ساعة</option><option value="48">48 ساعة</option><option value="72">72 ساعة</option></select></div>
+    <div class="field full"><label>وصف المآل</label><textarea name="description" placeholder="وصف سريري مختصر للمآل خلال 24-72 ساعة"></textarea></div>
+    <input name="recorded_by_user_id" type="hidden" value="2">
+    <div class="footer-actions full"><button class="btn primary" type="submit" ${appState.loading.outcomeSubmission ? "disabled" : ""}>${appState.loading.outcomeSubmission ? "جاري الحفظ..." : "حفظ المآل"}</button></div>
+  </form>`;
+}
+
+function renderOutcomeSubmission() {
+  if (appState.errors.outcomeSubmission) {
+    return `<div class="state-message error" role="alert"><strong>تعذر تسجيل المآل</strong><span>${escapeHtml(appState.errors.outcomeSubmission)}</span></div>`;
+  }
+  const result = appState.outcomeSubmission;
+  if (!result) return `<p class="kpi-meta">اختر حدث التدهور، نوع المآل، والفترة الزمنية ثم احفظ السجل.</p>`;
+  const outcome = normalizeClinicalOutcome(result.outcome);
+  return `<div class="state-message empty"><strong>${result.outcome_created ? "تم تسجيل المآل بنجاح" : "يوجد مآل مسجل مسبقا لهذه الفترة"}</strong><span>مآل #${outcome.id} - ${escapeHtml(label(labels.outcomeType, outcome.outcomeType))} - ${outcome.outcomeWindowHours} ساعة</span></div>`;
 }
 
 function renderTable(headers, rows) {
@@ -524,8 +1238,41 @@ function formatCell(cell) {
 }
 
 function renderFormScreen(route) {
+  if (route.entity === "vitals") return renderVitalSignsEntry();
   const fields = formFields[route.entity] || formFields.patient;
   return card(route.label, `<div class="form-grid">${fields.map((field, index) => `<div class="field ${index === fields.length - 1 ? "full" : ""}"><label>${field}</label>${index === fields.length - 1 ? `<textarea placeholder="${field}"></textarea>` : `<input placeholder="${field}">`}</div>`).join("")}</div><div class="footer-actions"><button class="btn primary">حفظ</button><button class="btn">حفظ كمسودة</button><button class="btn">إلغاء</button></div>`);
+}
+
+function renderVitalSignsEntry() {
+  const patientOptions = appState.patients.map((patient) => `<option value="${patient.id}">${escapeHtml(patient.patientCode)}</option>`).join("");
+  const sessionOptions = appState.dialysisSessions.map((session) => `<option value="${session.id}" data-patient-id="${session.patientId}">${escapeHtml(session.patientCode)} - ${escapeHtml(session.sessionDate)} - ${escapeHtml(label(labels.sessionStatus, session.sessionStatus))}</option>`).join("");
+  const result = appState.monitoringSubmission?.news2_assessment;
+  const success = appState.monitoringSubmission ? `<div class="state-message empty"><strong>تم حفظ القياس وحساب NEWS2 بنجاح</strong><span>تم إنشاء سجل قياس وسجل تقييم NEWS2 دون إنشاء تنبيه آلي في هذه المرحلة.</span></div>` : "";
+  const resultPanel = result ? renderMonitoringResult(result, appState.monitoringSubmission?.alert) : `<p class="kpi-meta">سيظهر مجموع NEWS2 ومكونات الدرجة بعد حفظ القياس.</p>`;
+  return `<div class="grid cols-2">
+    ${card("إدخال العلامات الحيوية", `
+      ${appState.errors.monitoringSubmission ? `<div class="state-message error" role="alert"><strong>تعذر حفظ القياس</strong><span>${escapeHtml(appState.errors.monitoringSubmission)}</span><span>تأكد من صحة البيانات المدخلة ومن ارتباط الجلسة بالمريض.</span></div>` : ""}
+      <form class="form-grid" onsubmit="submitMonitoringMeasurement(event)">
+        <div class="field"><label>المريض</label><select name="patient_id" required>${patientOptions}</select></div>
+        <div class="field"><label>جلسة الغسيل</label><select name="dialysis_session_id" required>${sessionOptions}</select></div>
+        <div class="field"><label>وقت القياس</label><input name="measurement_time" type="datetime-local" value="${defaultMeasurementTime()}" required></div>
+        <div class="field"><label>الفاصل الزمني بالدقائق</label><input name="measurement_interval_minutes" type="number" min="1" value="30" required></div>
+        <div class="field"><label>معدل التنفس</label><input name="respiratory_rate" type="number" min="1" value="18" required></div>
+        <div class="field"><label>تشبع الأوكسجين SpO2</label><input name="spo2" type="number" min="0" max="100" value="95" required></div>
+        <div class="field"><label>هل يتلقى أوكسجين؟</label><select name="oxygen_therapy"><option value="false">لا</option><option value="true">نعم</option></select></div>
+        <div class="field"><label>ضغط الدم الانقباضي</label><input name="systolic_bp" type="number" min="1" value="125" required></div>
+        <div class="field"><label>ضغط الدم الانبساطي</label><input name="diastolic_bp" type="number" min="1" value="75" required></div>
+        <div class="field"><label>معدل النبض</label><input name="pulse_rate" type="number" min="1" value="88" required></div>
+        <div class="field"><label>درجة الحرارة</label><input name="temperature" type="number" min="25" max="45" step="0.1" value="37.2" required></div>
+        <div class="field"><label>مستوى الوعي</label><select name="consciousness_level">${Object.entries(labels.consciousness).map(([value, text]) => `<option value="${value}">${text}</option>`).join("")}</select></div>
+        <div class="field"><label>وجود ارتباك حديث</label><select name="confusion_status"><option value="false">لا</option><option value="true">نعم</option></select></div>
+        <div class="field"><label>مقياس SpO2</label><select name="spo2_scale"><option value="scale_1">Scale 1</option><option value="scale_2">Scale 2 - مراجعة سريرية</option></select></div>
+        <input name="recorded_by_user_id" type="hidden" value="3">
+        <div class="footer-actions full"><button class="btn primary" type="submit" ${appState.loading.monitoringSubmission ? "disabled" : ""}>${appState.loading.monitoringSubmission ? "جاري الحفظ..." : "حفظ القياس وحساب NEWS2"}</button></div>
+      </form>
+    `)}
+    ${card("نتيجة NEWS2", `${success}${resultPanel}`)}
+  </div>`;
 }
 
 function renderProfile() {
@@ -548,16 +1295,311 @@ function renderVascular() {
 }
 
 function renderDetails(route) {
+  if (route.entity === "event") return renderEventDetails();
   const title = route.entity === "alert" ? "تنبيه NEWS2 عالي الخطورة" : route.entity === "event" ? "حدث تدهور سريري" : "جلسة غسيل نشطة";
   return `<div class="split"><div>${card(title, `<div class="patient-summary">${[["المريض", "ANON-P-1002"], ["NEWS2", "16"], ["الوقت", "08:42"], ["الحالة", "مفتوح"]].map(([a, b]) => `<div class="summary-cell"><span>${a}</span><strong>${b}</strong></div>`).join("")}</div><div style="margin-top:18px">${renderLineChart("تفاصيل الاتجاه السريري")}</div>`)}</div><aside>${card("إجراءات مطلوبة", renderActions())}</aside></div>`;
 }
 
+function renderEventDetails() {
+  if (appState.loading.deteriorationEvents) return loadingBlock("جاري تحميل تفاصيل حدث التدهور...");
+  const event = appState.deteriorationEvents[0];
+  if (!event) return emptyBlock("لا يوجد حدث تدهور سريري لعرض تفاصيله");
+  return `<div class="split"><div>${card("تفاصيل حدث التدهور", `<div class="patient-summary">${[
+    ["رمز المريض", event.patientCode],
+    ["جلسة الغسيل", event.sessionDate || event.dialysisSessionId],
+    ["التنبيه", `#${event.alertId}`],
+    ["NEWS2", event.news2TotalScore],
+    ["مستوى الخطورة", riskLevelLabel(event.riskLevel)],
+    ["نوع التدهور", label(labels.deteriorationType, event.deteriorationType)],
+    ["وقت التدهور", formatDateTime(event.deteriorationTime)],
+    ["من بداية الجلسة", event.timeFromSessionStartMinutes ?? "-"],
+    ["حالة التنبيه", label(labels.status, event.alertStatus)]
+  ].map(([a, b]) => `<div class="summary-cell"><span>${escapeHtml(a)}</span><strong>${escapeHtml(b)}</strong></div>`).join("")}</div><div style="margin-top:16px"><p class="kpi-meta">${escapeHtml(event.description || "لا يوجد وصف مسجل.")}</p></div>`)}</div><aside>${card("تسجيل الاستجابة الطبية والتمريضية", renderClinicalResponseForm(event))}</aside></div><div style="margin-top:16px">${card("نتيجة تسجيل الاستجابة", renderResponseSubmission())}</div>`;
+}
+
+function renderClinicalResponseForm(event) {
+  return `<form class="form-grid" onsubmit="submitClinicalResponse(event)">
+    <input name="clinical_deterioration_event_id" type="hidden" value="${event.id}">
+    <div class="field full"><label>حدث التدهور المرتبط</label><input value="#${event.id} - ${escapeHtml(event.patientCode)}" disabled></div>
+    <div class="field full"><label>وقت بدء الاستجابة الفعلي</label><input name="actual_response_start_time" type="datetime-local" value="${defaultMeasurementTime()}" required></div>
+    <div class="field full"><label>إجراءات المريض</label><select name="patient_actions" multiple>${Object.entries(labels.patientAction).map(([value, text]) => `<option value="${value}">${text}</option>`).join("")}</select></div>
+    <div class="field full"><label>إجراءات الوصلة الوعائية</label><select name="vascular_access_actions" multiple>${Object.entries(labels.vascularAction).map(([value, text]) => `<option value="${value}">${text}</option>`).join("")}</select></div>
+    <div class="field full"><label>المستخدم المستجيب</label><input name="responded_by_user_id" type="number" min="1" value="2"></div>
+    <div class="field full"><label>ملاحظات الاستجابة</label><textarea name="notes" placeholder="ملاحظات سريرية موجزة"></textarea></div>
+    <div class="footer-actions full"><button class="btn primary" type="submit" ${appState.loading.responseSubmission ? "disabled" : ""}>${appState.loading.responseSubmission ? "جاري الحفظ..." : "حفظ الاستجابة"}</button></div>
+  </form>`;
+}
+
+function renderResponseSubmission() {
+  if (appState.errors.responseSubmission) {
+    return `<div class="state-message error" role="alert"><strong>تعذر تسجيل الاستجابة</strong><span>${escapeHtml(appState.errors.responseSubmission)}</span></div>`;
+  }
+  const result = appState.responseSubmission;
+  if (!result) return `<p class="kpi-meta">سيظهر سجل الاستجابة هنا بعد الحفظ. لا يتم إنشاء مخرجات سريرية في هذه المرحلة.</p>`;
+  const response = normalizeClinicalResponse(result.response);
+  return `<div class="state-message empty"><strong>${result.response_created ? "تم تسجيل الاستجابة بنجاح" : "يوجد سجل استجابة مسجل مسبقا لهذا الحدث"}</strong><span>استجابة #${response.id} - زمن البدء: ${formatDateTime(response.actualResponseStartTime)} - التأخير: ${response.responseDelayMinutes ?? "-"} دقيقة</span></div>`;
+}
+
+function renderClinicalResponseLog(entity) {
+  if (appState.loading.clinicalResponses) return tableSkeleton("جاري تحميل سجل الاستجابة...");
+  if (appState.errors.clinicalResponses) return errorBlock("clinicalResponses");
+  if (!appState.clinicalResponses.length) return emptyBlock("لا توجد استجابات مسجلة حتى الآن");
+  const rows = appState.clinicalResponses.map((response) => [
+    response.id,
+    response.patientCode,
+    response.alertId,
+    label(labels.deteriorationType, response.deteriorationType),
+    response.news2TotalScore ?? "-",
+    delayBadge(response.responseDelayMinutes),
+    entity === "nursing" ? response.vascularAccessActions.map((item) => label(labels.vascularAction, item)).join(", ") : response.patientActions.map((item) => label(labels.patientAction, item)).join(", "),
+    formatDateTime(response.actualResponseStartTime)
+  ]);
+  const title = entity === "nursing" ? "الاستجابة التمريضية" : "الاستجابة الطبية";
+  return `<div class="grid cols-3">${renderKpi(["الاستجابات", appState.clinicalResponses.length, "من /api/responses", "info"])}${renderKpi(["متوسط التأخير", averageDelayText(), "دقيقة", "warning"])}${renderKpi(["الأسرع", fastestDelayText(), "دقيقة", "success"])}</div><div style="margin-top:16px">${card(title, renderTable(["المعرف", "المريض", "التنبيه", "نوع التدهور", "NEWS2", "زمن البدء", "الإجراءات", "وقت الاستجابة"], rows))}</div>`;
+}
+
+function delayBadge(value) {
+  if (value === null || value === undefined) return badge("-", "neutral");
+  if (value <= 5) return badge(`${value} د`, "success");
+  if (value <= 15) return badge(`${value} د`, "warning");
+  return badge(`${value} د`, "danger", true);
+}
+
+function averageDelayText() {
+  const values = appState.clinicalResponses.map((response) => response.responseDelayMinutes).filter((value) => Number.isFinite(value));
+  if (!values.length) return "-";
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
+function fastestDelayText() {
+  const values = appState.clinicalResponses.map((response) => response.responseDelayMinutes).filter((value) => Number.isFinite(value));
+  return values.length ? Math.min(...values) : "-";
+}
+
 function renderMonitoring() {
-  return `<div class="grid cols-4">${[["ضغط الدم", "92/58", "انخفاض عن الخط الأساسي", "warning"], ["النبض", "112", "صاعد", "warning"], ["SpO2", "91%", "حرج", "danger"], ["NEWS2", "16", "تصعيد", "danger"]].map((x) => renderKpi(x, x[3] === "danger")).join("")}</div><div class="grid cols-2" style="margin-top:16px">${card("منحنى العلامات الحيوية", renderLineChart("منحنى العلامات الحيوية"))}${card("ملاحظات الجلسة", renderTimelineItems())}</div>`;
+  if (appState.loading.monitoringMeasurements) return tableSkeleton("جاري تحميل قياسات الجلسات...");
+  if (appState.errors.monitoringMeasurements) return errorBlock("monitoringMeasurements");
+  const latest = appState.monitoringMeasurements[0];
+  const rows = appState.monitoringMeasurements.map((item) => [
+    item.id,
+    item.patientId,
+    item.dialysisSessionId,
+    formatDateTime(item.measurementTime),
+    `${item.systolicBp}/${item.diastolicBp}`,
+    item.pulseRate,
+    `${item.spo2}%`,
+    label(labels.consciousness, item.consciousnessLevel)
+  ]);
+  return `<div class="grid cols-4">${[
+    ["ضغط الدم", latest ? `${latest.systolicBp}/${latest.diastolicBp}` : "-", "آخر قياس محفوظ", "info"],
+    ["النبض", latest?.pulseRate ?? "-", "آخر قياس محفوظ", "info"],
+    ["SpO2", latest ? `${latest.spo2}%` : "-", "آخر قياس محفوظ", "info"],
+    ["القياسات", appState.monitoringMeasurements.length, "من /api/monitoring/measurements", "success"]
+  ].map((x) => renderKpi(x)).join("")}</div><div style="margin-top:16px">${card("القياسات الحديثة", rows.length ? renderTable(["المعرف", "المريض", "الجلسة", "وقت القياس", "الضغط", "النبض", "SpO2", "الوعي"], rows) : emptyBlock("لا توجد قياسات محفوظة حتى الآن"))}</div>`;
+}
+
+function renderMonitoringResult(result, alert) {
+  const alertSummary = alert
+    ? `<div class="state-message empty"><strong>${alert.alert_created ? "تم إنشاء تنبيه سريري" : "تم استخدام تنبيه نشط قائم"}</strong><span>المعرف: ${escapeHtml(alert.alert_id || "-")} - الأولوية: ${escapeHtml(priorityLabel(alert.priority))} - الحالة: ${escapeHtml(label(labels.status, alert.status))}</span></div>`
+    : `<div class="state-message empty"><strong>لا يوجد تنبيه آلي</strong><span>درجة NEWS2 لا تحقق قواعد إنشاء التنبيه في هذه المرحلة.</span></div>`;
+  return `${renderKpi(["الدرجة الكلية", result.total_score, riskLevelLabel(result.risk_level), riskTone(result.risk_level)], result.alert_required)}
+    ${alertSummary}
+    <div class="patient-summary">
+      <div class="summary-cell"><span>مستوى الخطورة</span><strong>${riskLevelLabel(result.risk_level)}</strong></div>
+      <div class="summary-cell"><span>يتطلب تنبيها سريريا</span><strong>${result.alert_required ? "نعم" : "لا"}</strong></div>
+      <div class="summary-cell"><span>سبب التفعيل</span><strong>${label(labels.trigger, result.trigger_reason)}</strong></div>
+      <div class="summary-cell"><span>مؤشر منفرد بدرجة 3</span><strong>${result.single_parameter_trigger ? "نعم" : "لا"}</strong></div>
+    </div>
+    <div style="margin-top:16px">${renderTable(["المكون", "النقاط"], [
+      ["التنفس", result.respiratory_score],
+      ["تشبع الأوكسجين", result.spo2_score],
+      ["الأوكسجين الإضافي", result.oxygen_score],
+      ["ضغط الدم الانقباضي", result.systolic_bp_score],
+      ["النبض", result.pulse_score],
+      ["درجة الحرارة", result.temperature_score],
+      ["الوعي", result.consciousness_score]
+    ])}</div>`;
+}
+
+function defaultMeasurementTime() {
+  const date = new Date();
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 16);
+}
+
+async function submitMonitoringMeasurement(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  appState.loading.monitoringSubmission = true;
+  appState.errors.monitoringSubmission = null;
+  render();
+  try {
+    appState.monitoringSubmission = await api.createMonitoringMeasurement({
+      patient_id: Number(data.get("patient_id")),
+      dialysis_session_id: Number(data.get("dialysis_session_id")),
+      measurement_time: new Date(data.get("measurement_time")).toISOString(),
+      measurement_interval_minutes: Number(data.get("measurement_interval_minutes")),
+      respiratory_rate: Number(data.get("respiratory_rate")),
+      spo2: Number(data.get("spo2")),
+      oxygen_therapy: data.get("oxygen_therapy") === "true",
+      systolic_bp: Number(data.get("systolic_bp")),
+      diastolic_bp: Number(data.get("diastolic_bp")),
+      pulse_rate: Number(data.get("pulse_rate")),
+      temperature: Number(data.get("temperature")),
+      consciousness_level: data.get("consciousness_level"),
+      confusion_status: data.get("confusion_status") === "true",
+      spo2_scale: data.get("spo2_scale"),
+      recorded_by_user_id: Number(data.get("recorded_by_user_id"))
+    });
+    appState.monitoringMeasurements = await api.getMonitoringMeasurements();
+    appState.news2Assessments = await api.getNews2Assessments();
+    appState.alerts = await api.getAlerts();
+    appState.researchSummary = await api.getResearchSummary();
+  } catch (error) {
+    appState.errors.monitoringSubmission = error.message || "تعذر حفظ القياس";
+  } finally {
+    appState.loading.monitoringSubmission = false;
+    render();
+  }
+}
+
+async function submitDeteriorationEvent(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  appState.loading.deteriorationSubmission = true;
+  appState.errors.deteriorationSubmission = null;
+  render();
+  try {
+    appState.deteriorationSubmission = await api.createDeteriorationEvent({
+      alert_id: Number(data.get("alert_id")),
+      deterioration_time: new Date(data.get("deterioration_time")).toISOString(),
+      deterioration_type: data.get("deterioration_type"),
+      description: data.get("description") || null,
+      created_by_user_id: Number(data.get("created_by_user_id"))
+    });
+    appState.deteriorationEvents = await api.getDeteriorationEvents();
+    appState.responseTrackingRecords = await api.getResponseTrackingRecords();
+    appState.responseTrackingSummary = await api.getResponseTrackingSummary();
+    appState.alerts = await api.getAlerts();
+    appState.researchSummary = await api.getResearchSummary();
+  } catch (error) {
+    appState.errors.deteriorationSubmission = error.message || "تعذر إنشاء حدث التدهور";
+  } finally {
+    appState.loading.deteriorationSubmission = false;
+    render();
+  }
+}
+
+async function submitClinicalResponse(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  appState.loading.responseSubmission = true;
+  appState.errors.responseSubmission = null;
+  render();
+  try {
+    appState.responseSubmission = await api.createClinicalResponse({
+      clinical_deterioration_event_id: Number(data.get("clinical_deterioration_event_id")),
+      actual_response_start_time: new Date(data.get("actual_response_start_time")).toISOString(),
+      patient_actions: data.getAll("patient_actions"),
+      vascular_access_actions: data.getAll("vascular_access_actions"),
+      responded_by_user_id: Number(data.get("responded_by_user_id")),
+      notes: data.get("notes") || null
+    });
+    appState.clinicalResponses = await api.getClinicalResponses();
+    appState.responseTrackingRecords = await api.getResponseTrackingRecords();
+    appState.responseTrackingSummary = await api.getResponseTrackingSummary();
+    appState.alerts = await api.getAlerts();
+    appState.researchSummary = await api.getResearchSummary();
+  } catch (error) {
+    appState.errors.responseSubmission = error.message || "تعذر تسجيل الاستجابة";
+  } finally {
+    appState.loading.responseSubmission = false;
+    render();
+  }
+}
+
+async function submitClinicalOutcome(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  appState.loading.outcomeSubmission = true;
+  appState.errors.outcomeSubmission = null;
+  render();
+  try {
+    appState.outcomeSubmission = await api.createClinicalOutcome({
+      clinical_deterioration_event_id: Number(data.get("clinical_deterioration_event_id")),
+      outcome_type: data.get("outcome_type"),
+      outcome_window_hours: Number(data.get("outcome_window_hours")),
+      description: data.get("description") || null,
+      recorded_by_user_id: Number(data.get("recorded_by_user_id"))
+    });
+    appState.clinicalOutcomes = await api.getClinicalOutcomes();
+    appState.outcomeSummary = await api.getOutcomeSummary();
+    appState.researchSummary = await api.getResearchSummary();
+  } catch (error) {
+    appState.errors.outcomeSubmission = error.message || "تعذر تسجيل المآل";
+  } finally {
+    appState.loading.outcomeSubmission = false;
+    render();
+  }
 }
 
 function renderAssessment() {
-  return `<div class="grid cols-2">${card("مكونات NEWS2", renderTable(["المكون", "القراءة", "النقاط", "التقييم"], [["التنفس", "24", "2", "متوسط"], ["الأكسجين", "91%", "3", "حرج"], ["الضغط", "92", "3", "حرج"], ["الوعي", "ارتباك جديد", "3", "حرج"], ["الحرارة", "37.9", "1", "متابعة"]]))}${card("قرار التصعيد", `<div class="kpi-value risk-high">NEWS2 16</div><p class="kpi-meta">تصعيد طبي ومراقبة كل 15 دقيقة.</p>${renderActions()}`)}</div>`;
+  const result = appState.news2Demo;
+  const resultPanel = result
+    ? `${renderKpi(["NEWS2", result.total_score, riskLevelLabel(result.risk_level), riskTone(result.risk_level)], result.alert_required)}
+      ${renderTable(["المكون", "النقاط"], [
+        ["التنفس", result.respiratory_score],
+        ["SpO2", result.spo2_score],
+        ["الأكسجين الإضافي", result.oxygen_score],
+        ["الضغط الانقباضي", result.systolic_bp_score],
+        ["النبض", result.pulse_score],
+        ["الحرارة", result.temperature_score],
+        ["الوعي", result.consciousness_score]
+      ])}
+      <p class="kpi-meta">${label(labels.trigger, result.trigger_reason)}</p>
+      <p class="kpi-meta">${result.alert_required ? "يتطلب تنبيها سريريا" : "لا يتطلب تنبيها حسب العتبة الرقمية"}</p>`
+    : `${appState.errors.news2Demo ? errorBlock("news2Demo") : ""}<p class="kpi-meta">أدخل العلامات الحيوية لحساب NEWS2 عبر الخادم دون حفظ السجل في قاعدة البيانات.</p>`;
+  return `<div class="grid cols-2">${card("حاسبة NEWS2", renderNews2CalculatorForm())}${card("نتيجة الحساب", resultPanel)}</div><div style="margin-top:16px">${card("ملاحظة السلامة الطبية", `<p class="kpi-meta">NEWS2 أداة دعم قرار للكشف المبكر عن التدهور ولا تستبدل الحكم السريري. يجب مراجعة التطبيق سريريا قبل الاستخدام الفعلي.</p>`)}</div>`;
+}
+
+function renderNews2CalculatorForm() {
+  return `<form class="form-grid" onsubmit="calculateNews2Demo(event)">
+    <div class="field"><label>معدل التنفس</label><input name="respiratory_rate" type="number" min="1" value="18" required></div>
+    <div class="field"><label>SpO2</label><input name="spo2" type="number" min="0" max="100" value="95" required></div>
+    <div class="field"><label>الضغط الانقباضي</label><input name="systolic_bp" type="number" min="1" value="125" required></div>
+    <div class="field"><label>النبض</label><input name="pulse_rate" type="number" min="1" value="88" required></div>
+    <div class="field"><label>الحرارة</label><input name="temperature" type="number" min="25" max="45" step="0.1" value="37.2" required></div>
+    <div class="field"><label>مقياس SpO2</label><select name="spo2_scale"><option value="scale_1">Scale 1</option><option value="scale_2">Scale 2 - مراجعة سريرية</option></select></div>
+    <div class="field"><label>مستوى الوعي</label><select name="consciousness_level">${Object.entries(labels.consciousness).map(([value, text]) => `<option value="${value}">${text}</option>`).join("")}</select></div>
+    <div class="field"><label>أكسجين إضافي</label><select name="oxygen_therapy"><option value="false">لا</option><option value="true">نعم</option></select></div>
+    <div class="footer-actions full"><button class="btn primary" type="submit">احسب NEWS2</button></div>
+  </form>`;
+}
+
+async function calculateNews2Demo(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  try {
+    appState.news2Demo = await api.calculateNews2({
+      respiratory_rate: Number(data.get("respiratory_rate")),
+      spo2: Number(data.get("spo2")),
+      oxygen_therapy: data.get("oxygen_therapy") === "true",
+      systolic_bp: Number(data.get("systolic_bp")),
+      pulse_rate: Number(data.get("pulse_rate")),
+      temperature: Number(data.get("temperature")),
+      consciousness_level: data.get("consciousness_level"),
+      spo2_scale: data.get("spo2_scale")
+    });
+    appState.errors.news2Demo = null;
+  } catch (error) {
+    appState.errors.news2Demo = error.message;
+  }
+  render();
 }
 
 function renderTrend() {
@@ -565,20 +1607,233 @@ function renderTrend() {
 }
 
 function renderTimeline(route) {
+  if (route.entity === "event") return renderEventTimeline();
   return `<div class="split"><div>${card(route.label, renderTimelineItems())}</div><aside>${card("مؤشرات زمنية", `${renderKpi(["زمن الاكتشاف", "0 د", "آلي", "success"])}${renderKpi(["زمن التصعيد", "9 د", "ضمن الهدف", "success"])}${renderKpi(["زمن الإغلاق", "قيد المتابعة", "لم يغلق بعد", "warning"])}`)}</aside></div>`;
 }
 
+function renderEventTimeline() {
+  if (appState.loading.deteriorationEvents) return loadingBlock("جاري تحميل الخط الزمني للتدهور...");
+  const event = appState.deteriorationEvents[0];
+  if (!event) return emptyBlock("لا يوجد حدث تدهور سريري لبناء خط زمني");
+  const items = [
+    [formatDateTime(event.deteriorationTime), "تم تسجيل العلامات الحيوية", `المريض ${event.patientCode}`],
+    [formatDateTime(event.createdAt), "تم حساب NEWS2", `الدرجة ${event.news2TotalScore}`],
+    [formatDateTime(event.createdAt), "تم إنشاء التنبيه", `تنبيه #${event.alertId}`],
+    [formatDateTime(event.createdAt), "تم فتح سجل التدهور", label(labels.deteriorationType, event.deteriorationType)],
+    ["قيد الانتظار", "توثيق الاستجابة", "سيتم في مرحلة الاستجابة الطبية والتمريضية"]
+  ];
+  return `<div class="split"><div>${card("الخط الزمني للتدهور السريري", `<div class="timeline">${items.map(([time, title, text]) => `<div class="timeline-item"><strong>${escapeHtml(time)} - ${escapeHtml(title)}</strong><span>${escapeHtml(text)}</span></div>`).join("")}</div>`)}</div><aside>${card("مؤشرات زمنية", `${renderKpi(["من بداية الجلسة", event.timeFromSessionStartMinutes ?? "-", "دقيقة", "info"])}${renderKpi(["NEWS2", event.news2TotalScore, riskLevelLabel(event.riskLevel), riskTone(event.riskLevel)], event.riskLevel === "high")}`)}</aside></div>`;
+}
+
 function renderWorkflow(route) {
+  if (route.id === "response-workflow") return renderResponseWorkflow();
+  if (route.id === "outcome-tracking") return renderOutcomeTracking();
   return `<div class="grid cols-4">${["اكتشاف", "تأكيد", "تصعيد", "إغلاق"].map((step, index) => renderKpi([step, index < 3 ? "تم" : "نشط", index < 3 ? "موثق" : "بانتظار المخرج", index < 3 ? "success" : "warning"])).join("")}</div><div style="margin-top:16px">${card(route.label, renderTimelineItems())}</div>`;
 }
 
+function renderOutcomeTracking() {
+  if (appState.loading.clinicalOutcomes || appState.loading.deteriorationEvents) return loadingBlock("جاري تحميل متابعة المآلات...");
+  if (appState.errors.clinicalOutcomes) return errorBlock("clinicalOutcomes");
+  const outcome = appState.clinicalOutcomes[0];
+  if (!outcome) return `<div class="grid cols-2">${card("تسجيل المآل السريري", renderOutcomeForm())}${card("نتيجة التسجيل", renderOutcomeSubmission())}</div>`;
+  const items = [
+    [outcome.createdAt, "تم فتح سجل التدهور", label(labels.deteriorationType, outcome.deteriorationType)],
+    [outcome.outcomeRecordedAt, "تم تسجيل المآل السريري", `${label(labels.outcomeType, outcome.outcomeType)} - ${outcome.outcomeWindowHours} ساعة`],
+    [outcome.createdAt, "تم تحديث تحليلات المآلات", `مآل #${outcome.id}`]
+  ];
+  return `<div class="split">
+    <div>${card("متابعة المآلات", `<div class="timeline">${items.map(([time, title, text]) => `<div class="timeline-item"><strong>${escapeHtml(formatDateTime(time))} - ${escapeHtml(title)}</strong><span>${escapeHtml(text)}</span></div>`).join("")}</div>`)}</div>
+    <aside>${card("تفاصيل المآل", renderOutcomeDetails(outcome))}</aside>
+  </div>`;
+}
+
+function renderOutcomeDetails(outcome) {
+  return renderTable(["الحقل", "القيمة"], [
+    ["رمز المريض", outcome.patientCode],
+    ["تاريخ الجلسة", outcome.sessionDate || "-"],
+    ["معرف التنبيه", outcome.alertId ? `#${outcome.alertId}` : "-"],
+    ["درجة NEWS2", outcome.news2TotalScore ?? "-"],
+    ["نوع التدهور", label(labels.deteriorationType, outcome.deteriorationType)],
+    ["نوع المآل", label(labels.outcomeType, outcome.outcomeType)],
+    ["فترة المآل", `${outcome.outcomeWindowHours} ساعة`],
+    ["المستخدم المسجل", outcome.recordedByUserId ?? "-"],
+    ["الوصف", outcome.description || "-"],
+    ["وقت الإنشاء", formatDateTime(outcome.createdAt)]
+  ]);
+}
+
+function renderResponseWorkflow() {
+  if (appState.loading.responseTrackingRecords || appState.loading.clinicalResponses) return loadingBlock("جاري تحميل مسار الاستجابة...");
+  const tracking = appState.responseTrackingRecords[0];
+  if (tracking) return renderResponseTrackingWorkflow(tracking);
+  if (appState.errors.responseTrackingRecords) return errorBlock("responseTrackingRecords");
+  if (appState.loading.clinicalResponses) return loadingBlock("جاري تحميل مسار الاستجابة...");
+  const response = appState.clinicalResponses[0];
+  if (!response) return emptyBlock("لا توجد استجابة مسجلة لبناء مسار الاستجابة");
+  const items = [
+    [formatDateTime(response.digitalAlertTime), "تم إنشاء التنبيه", `تنبيه #${response.alertId}`],
+    [formatDateTime(response.createdAt), "تم فتح سجل التدهور", label(labels.deteriorationType, response.deteriorationType)],
+    [formatDateTime(response.actualResponseStartTime), "بدأت الاستجابة الفعلية", `تأخير ${response.responseDelayMinutes ?? "-"} دقيقة`],
+    [formatDateTime(response.createdAt), "تم توثيق الإجراءات الطبية والتمريضية", response.patientActions.map((item) => label(labels.patientAction, item)).join(", ") || "موثق"]
+  ];
+  return `<div class="split"><div>${card("مسار الاستجابة", `<div class="timeline">${items.map(([time, title, text]) => `<div class="timeline-item"><strong>${escapeHtml(time)} - ${escapeHtml(title)}</strong><span>${escapeHtml(text)}</span></div>`).join("")}</div>`)}</div><aside>${card("زمن الاستجابة", `${renderKpi(["زمن بدء الاستجابة", response.responseDelayMinutes ?? "-", "دقيقة", response.responseDelayMinutes > 15 ? "danger" : response.responseDelayMinutes > 5 ? "warning" : "success"], response.responseDelayMinutes > 15)}${renderKpi(["NEWS2", response.news2TotalScore ?? "-", "عند التدهور", "info"])}`)}</aside></div>`;
+}
+
+function renderResponseTrackingWorkflow(tracking) {
+  const items = [
+    [tracking.vitalSignsRecordedAt, "تم تسجيل العلامات الحيوية", `المريض ${tracking.patientCode}`],
+    [tracking.alertCreatedAt, "تم إنشاء التنبيه", `تنبيه #${tracking.alertId}`],
+    [tracking.alertViewedAt, "تمت مشاهدة التنبيه", tracking.alertViewedAt ? `${tracking.timeToViewMinutes ?? "-"} دقيقة` : "قيد الانتظار"],
+    [tracking.deteriorationEventCreatedAt, "تم فتح سجل التدهور", label(labels.deteriorationType, tracking.deteriorationType)],
+    [tracking.actualResponseStartTime, "بدأت الاستجابة", tracking.timeToResponseMinutes !== null && tracking.timeToResponseMinutes !== undefined ? `${tracking.timeToResponseMinutes} دقيقة` : "قيد الانتظار"],
+    [tracking.alertClosedAt, "تم إغلاق التنبيه", tracking.alertClosedAt ? `${tracking.totalResponseTimeMinutes ?? "-"} دقيقة إجمالا` : "قيد المتابعة"]
+  ];
+  const timeline = items.map(([time, title, text]) => {
+    const displayTime = time ? formatDateTime(time) : "قيد الانتظار";
+    const tone = time ? "" : " pending";
+    return `<div class="timeline-item${tone}"><strong>${escapeHtml(displayTime)} - ${escapeHtml(title)}</strong><span>${escapeHtml(text)}</span></div>`;
+  }).join("");
+  return `<div class="split"><div>${card("مسار الاستجابة", `<div class="timeline">${timeline}</div>`)}</div><aside>${card("زمن الاستجابة", `${renderKpi(["زمن إنشاء التنبيه", minuteText(tracking.timeToAlertMinutes), "من تسجيل العلامات", "info"])}${renderKpi(["زمن بدء الاستجابة", minuteText(tracking.timeToResponseMinutes), "من إنشاء التنبيه", responseTone(tracking.timeToResponseMinutes)], (tracking.timeToResponseMinutes || 0) > 15)}${renderKpi(["NEWS2", tracking.news2TotalScore ?? "-", riskLevelLabel(tracking.riskLevel), riskTone(tracking.riskLevel)])}`)}</aside></div>`;
+}
+
+function renderResponseTimeDashboard() {
+  if (appState.loading.responseTrackingRecords || appState.loading.responseTrackingSummary) return loadingBlock("جاري تحميل مؤشرات زمن الاستجابة...");
+  if (appState.errors.responseTrackingRecords) return errorBlock("responseTrackingRecords");
+  const s = appState.responseTrackingSummary || {};
+  const rows = responseTrackingRows();
+  return `<div class="grid cols-3">
+    ${renderKpi(["متوسط زمن إنشاء التنبيه", minuteText(s.averageTimeToAlertMinutes), "من تسجيل العلامات", "info"])}
+    ${renderKpi(["متوسط زمن مشاهدة التنبيه", minuteText(s.averageTimeToViewMinutes), "من إنشاء التنبيه", "info"])}
+    ${renderKpi(["متوسط زمن بدء الاستجابة", minuteText(s.averageTimeToResponseMinutes), "من إنشاء التنبيه", "warning"])}
+    ${renderKpi(["أسرع استجابة", minuteText(s.fastestResponseMinutes), "دقيقة", "success"])}
+    ${renderKpi(["أبطأ استجابة", minuteText(s.slowestResponseMinutes), "دقيقة", responseTone(s.slowestResponseMinutes)], (s.slowestResponseMinutes || 0) > 15)}
+    ${renderKpi(["تنبيهات بدون استجابة", s.alertsWithoutResponseCount ?? 0, "قيد المتابعة", (s.alertsWithoutResponseCount || 0) ? "warning" : "success"])}
+  </div><div style="margin-top:16px">${card("سجل تتبع زمن الاستجابة", rows.length ? renderTable(["رمز المريض", "تاريخ الجلسة", "NEWS2", "مستوى الخطورة", "نوع التدهور", "زمن التنبيه", "زمن المشاهدة", "زمن الاستجابة", "الزمن الإجمالي"], rows) : emptyBlock("لا توجد سجلات تتبع زمن الاستجابة حتى الآن"))}</div>`;
+}
+
+function renderResponseAnalytics() {
+  if (appState.loading.responseTrackingRecords || appState.loading.responseTrackingSummary) return loadingBlock("جاري تحميل تحليلات الاستجابة...");
+  const s = appState.responseTrackingSummary || {};
+  const records = appState.responseTrackingRecords || [];
+  const averages = [s.averageTimeToAlertMinutes || 0, s.averageTimeToViewMinutes || 0, s.averageTimeToResponseMinutes || 0, s.averageTimeToActionMinutes || 0, s.averageTotalResponseTimeMinutes || 0];
+  const withResponse = records.filter((record) => record.timeToResponseMinutes !== null && record.timeToResponseMinutes !== undefined).length;
+  const withoutResponse = s.alertsWithoutResponseCount || 0;
+  return `<div class="grid cols-4">
+    ${renderKpi(["السجلات", s.recordsCount ?? records.length, "response_tracking", "info"])}
+    ${renderKpi(["متوسط الاستجابة", minuteText(s.averageTimeToResponseMinutes), "دقيقة", "warning"])}
+    ${renderKpi(["مكتملة الاستجابة", withResponse, "لها وقت بدء", "success"])}
+    ${renderKpi(["بدون استجابة", withoutResponse, "قيد المتابعة", withoutResponse ? "warning" : "success"])}
+  </div><div class="grid cols-2" style="margin-top:16px">${card("متوسطات زمن الاستجابة", renderBarChart(averages))}${card("الاستجابة حسب الحالة", renderBarChart([withResponse, withoutResponse || 1]))}</div><div style="margin-top:16px">${card("تحليل الخطورة والزمن", renderRiskTimingTable(records))}</div>`;
+}
+
+function responseTrackingRows() {
+  return (appState.responseTrackingRecords || []).map((record) => [
+    record.patientCode,
+    record.sessionDate || "-",
+    record.news2TotalScore ?? "-",
+    badge(riskLevelLabel(record.riskLevel), riskTone(record.riskLevel), record.riskLevel === "high" || record.riskLevel === "critical"),
+    label(labels.deteriorationType, record.deteriorationType),
+    minuteText(record.timeToAlertMinutes),
+    minuteText(record.timeToViewMinutes),
+    delayBadge(record.timeToResponseMinutes),
+    minuteText(record.totalResponseTimeMinutes)
+  ]);
+}
+
+function renderRiskTimingTable(records) {
+  const groups = records.reduce((acc, record) => {
+    const key = record.riskLevel || "unknown";
+    acc[key] = acc[key] || [];
+    if (Number.isFinite(record.timeToResponseMinutes)) acc[key].push(record.timeToResponseMinutes);
+    return acc;
+  }, {});
+  const rows = Object.entries(groups).map(([risk, values]) => [
+    riskLevelLabel(risk),
+    values.length,
+    values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : "-",
+    values.length ? Math.min(...values) : "-"
+  ]);
+  return rows.length ? renderTable(["مستوى الخطورة", "عدد الاستجابات", "متوسط الزمن", "الأسرع"], rows) : emptyBlock("لا توجد بيانات كافية للتحليل حسب الخطورة");
+}
+
+function minuteText(value) {
+  return value === null || value === undefined ? "-" : `${value} د`;
+}
+
+function responseTone(value) {
+  if (value === null || value === undefined) return "neutral";
+  if (value <= 5) return "success";
+  if (value <= 15) return "warning";
+  return "danger";
+}
+
 function renderAnalytics(route) {
+  if (route.id === "study-metrics") return renderResearchAnalyticsDashboard();
+  if (route.id === "response-time-dashboard") return renderResponseTimeDashboard();
+  if (route.id === "response-analytics") return renderResponseAnalytics();
+  if (route.id === "outcome-analytics") return renderOutcomeAnalytics();
+  if (route.id === "dataset-statistics") return renderDatasetStatistics();
   return `<div class="grid cols-4">${[
     ["المرضى", appState.researchSummary?.patientsCount ?? "-", "API عند التوفر", "info"],
     ["الجلسات", appState.researchSummary?.sessionsCount ?? "-", "API عند التوفر", "info"],
     ["التنبيهات", appState.researchSummary?.alertsCount ?? "-", "API عند التوفر", "warning"],
     ["المخرجات", appState.researchSummary?.outcomesCount ?? "-", "API عند التوفر", "success"]
   ].map((item) => renderKpi(item)).join("")}</div><div class="grid cols-2" style="margin-top:16px">${card("تحليل الاتجاهات", renderLineChart("تحليل الاتجاهات"))}${card("توزيع المؤشرات", renderBarChart([30, 48, 24, 16, 10]))}</div><div style="margin-top:16px">${card(route.label, renderTable(["المؤشر", "قبل", "بعد", "التحسن"], [["زمن الاستجابة", "18 د", "9 د", "50%"], ["اكتمال التوثيق", "82%", "97%", "15%"], ["التنبيهات المغلقة", "70%", "91%", "21%"]]))}</div>`;
+}
+
+function renderDatasetStatistics() {
+  if (appState.loading.researchDatasetQuality || appState.loading.researchDatasetRows) return loadingBlock("جاري تحميل إحصاءات البيانات البحثية...");
+  if (appState.errors.researchDatasetQuality) return errorBlock("researchDatasetQuality");
+  const quality = appState.researchDatasetQuality || {};
+  const stats = quality.statistics || {};
+  return `<div class="grid cols-4">
+    ${renderKpi(["عدد سجلات البحث", stats.dataset_rows ?? quality.totalRows ?? 0, "measurement + NEWS2", "info"])}
+    ${renderKpi(["عدد القياسات", stats.measurements_count ?? 0, "intradialytic_measurements", "info"])}
+    ${renderKpi(["عدد تنبيهات NEWS2", stats.news2_alerts_count ?? 0, "alerts", (stats.news2_alerts_count || 0) ? "warning" : "success"])}
+    ${renderKpi(["عدد أحداث التدهور", stats.deterioration_events_count ?? 0, "events", (stats.deterioration_events_count || 0) ? "warning" : "success"])}
+    ${renderKpi(["عدد الاستجابات", stats.responses_count ?? 0, "clinical_responses", "info"])}
+    ${renderKpi(["عدد المآلات", stats.outcomes_count ?? 0, "clinical_outcomes", "success"])}
+    ${renderKpi(["نسبة اكتمال البيانات", `${stats.completion_rate ?? quality.qualityScore ?? 0}%`, "quality score", (stats.completion_rate || quality.qualityScore || 0) >= 80 ? "success" : "warning"])}
+  </div>
+  <div class="grid cols-2" style="margin-top:16px">
+    ${card("المشاكل حسب النوع", renderQualityIssuesTable(quality.issuesByType || {}))}
+    ${card("توزيع الجاهزية", renderBarChart([stats.dataset_rows || 0, stats.news2_alerts_count || 0, stats.deterioration_events_count || 0, stats.responses_count || 0, stats.outcomes_count || 0]))}
+  </div>`;
+}
+
+function renderOutcomeAnalytics() {
+  if (appState.loading.outcomeSummary || appState.loading.clinicalOutcomes) return loadingBlock("جاري تحميل تحليلات المآلات...");
+  const s = appState.outcomeSummary || {};
+  const outcomes = appState.clinicalOutcomes || [];
+  const values = [
+    s.stableCompletedSessionCount || 0,
+    s.sessionStoppedEarlyCount || 0,
+    s.hospitalAdmissionCount || 0,
+    s.emergencyDepartmentTransferCount || 0,
+    s.icuAdmissionCount || 0,
+    s.deathCount || 0
+  ];
+  return `<div class="grid cols-4">
+    ${renderKpi(["إجمالي المآلات", s.totalOutcomes ?? outcomes.length, "clinical_outcomes", "info"])}
+    ${renderKpi(["استقرار واستكمال الجلسة", s.stableCompletedSessionCount ?? 0, "مآل مستقر", "success"])}
+    ${renderKpi(["إدخال إلى المستشفى", s.hospitalAdmissionCount ?? 0, "مؤشر بحثي", (s.hospitalAdmissionCount || 0) ? "warning" : "success"])}
+    ${renderKpi(["تحويل إلى الطوارئ", s.emergencyDepartmentTransferCount ?? 0, "مؤشر تصعيد", (s.emergencyDepartmentTransferCount || 0) ? "warning" : "success"])}
+    ${renderKpi(["العناية المركزة", s.icuAdmissionCount ?? 0, "مآل حرج", (s.icuAdmissionCount || 0) ? "danger" : "success"], (s.icuAdmissionCount || 0) > 0)}
+    ${renderKpi(["الوفيات", s.deathCount ?? 0, "مآل نهائي", (s.deathCount || 0) ? "danger" : "success"], (s.deathCount || 0) > 0)}
+  </div>
+  <div class="grid cols-2" style="margin-top:16px">
+    ${card("توزيع المآلات", renderBarChart(values))}
+    ${card("المآلات حسب الفترة", renderOutcomeWindowTable(outcomes))}
+  </div>
+  <div style="margin-top:16px">${card("آخر المآلات المسجلة", outcomes.length ? renderTable(["المريض", "NEWS2", "نوع التدهور", "نوع المآل", "الفترة", "وقت التسجيل"], outcomes.slice(0, 8).map((outcome) => [outcome.patientCode, outcome.news2TotalScore ?? "-", label(labels.deteriorationType, outcome.deteriorationType), label(labels.outcomeType, outcome.outcomeType), `${outcome.outcomeWindowHours} ساعة`, formatDateTime(outcome.createdAt)])) : emptyBlock("لا توجد مآلات لتحليلها حتى الآن"))}</div>`;
+}
+
+function renderOutcomeWindowTable(outcomes) {
+  const windows = [24, 48, 72].map((windowHours) => {
+    const rows = outcomes.filter((outcome) => outcome.outcomeWindowHours === windowHours);
+    return [`${windowHours} ساعة`, rows.length, rows.filter((outcome) => outcome.outcomeType === "stable_completed_session").length, rows.filter((outcome) => ["hospital_admission", "emergency_department_transfer", "icu_admission", "death"].includes(outcome.outcomeType)).length];
+  });
+  return renderTable(["الفترة", "الإجمالي", "مستقر", "تصعيد / مآل حرج"], windows);
 }
 
 function renderComparison() {
@@ -633,6 +1888,457 @@ function card(title, body) {
   return `<article class="card"><div class="card-header"><h2 class="card-title">${escapeHtml(title)}</h2></div><div class="card-body">${body}</div></article>`;
 }
 
+function renderExport() {
+  if (appState.loading.researchDatasetRows || appState.loading.researchDatasetQuality) return loadingBlock("جاري تحميل مركز التصدير البحثي...");
+  const rows = appState.researchDatasetRows || [];
+  const quality = appState.researchDatasetQuality || {};
+  return `<div class="dashboard-hero">
+    <div class="hero-band">
+      <h2>مركز التصدير البحثي</h2>
+      <p>تجهيز Dataset بحثية محمية الخصوصية بصيغ CSV و Excel مع Codebook و Variable Labels جاهزة للتحضير في SPSS.</p>
+    </div>
+    <div class="status-panel">
+      ${renderKpi(["درجة جودة البيانات", `${quality.qualityScore ?? 0}%`, "جاهزية البيانات البحثية", (quality.qualityScore || 0) >= 80 ? "success" : "warning"])}
+      ${renderKpi(["عدد السجلات", quality.totalRows ?? rows.length, "سجلات Dataset", "info"])}
+    </div>
+  </div>
+  <div class="grid cols-2" style="margin-top:16px">
+    ${card("فلاتر Dataset", renderExportFilters())}
+    ${card("تنزيل ملفات التصدير", renderExportButtons())}
+  </div>
+  <div class="grid cols-2" style="margin-top:16px">
+    ${card("جاهزية البيانات البحثية", renderQualityPanel(quality))}
+    ${card("تنبيهات قبل التصدير", renderQualityWarnings(quality.warnings || []))}
+  </div>
+  <div style="margin-top:16px">${card("Dataset Preview", rows.length ? renderTable(["patient_code", "session_date", "measurement_time", "news2_total_score", "risk_level", "alert_created", "deterioration_type", "response_delay_minutes", "outcome_type", "study_phase", "study_group"], rows.map(datasetPreviewRow)) : emptyBlock("لا توجد سجلات مطابقة للفلاتر المحددة"))}</div>`;
+}
+
+function renderExportFilters() {
+  const filters = appState.researchExportFilters || {};
+  return `<form class="form-grid" onsubmit="submitResearchExportFilters(event)">
+    <div class="field"><label>من تاريخ</label><input name="start_date" type="date" value="${escapeHtml(filters.start_date || "")}"></div>
+    <div class="field"><label>إلى تاريخ</label><input name="end_date" type="date" value="${escapeHtml(filters.end_date || "")}"></div>
+    <div class="field"><label>مرحلة الدراسة</label><select name="study_phase"><option value="">الكل</option><option value="pre_implementation" ${filters.study_phase === "pre_implementation" ? "selected" : ""}>قبل التطبيق</option><option value="post_implementation" ${filters.study_phase === "post_implementation" ? "selected" : ""}>بعد التطبيق</option></select></div>
+    <div class="field"><label>مجموعة الدراسة</label><select name="study_group"><option value="">الكل</option><option value="control" ${filters.study_group === "control" ? "selected" : ""}>ضابطة</option><option value="intervention" ${filters.study_group === "intervention" ? "selected" : ""}>تدخل</option></select></div>
+    <div class="field"><label>مستوى الخطورة</label><select name="risk_level"><option value="">الكل</option><option value="low" ${filters.risk_level === "low" ? "selected" : ""}>منخفض</option><option value="medium" ${filters.risk_level === "medium" ? "selected" : ""}>متوسط</option><option value="high" ${filters.risk_level === "high" ? "selected" : ""}>مرتفع</option></select></div>
+    <div class="field"><label>نوع المآل</label><select name="outcome_type"><option value="">الكل</option>${Object.entries(labels.outcomeType).map(([value, text]) => `<option value="${value}" ${filters.outcome_type === value ? "selected" : ""}>${text}</option>`).join("")}</select></div>
+    <div class="field full"><label>نوع التدهور</label><select name="deterioration_type"><option value="">الكل</option>${Object.entries(labels.deteriorationType).map(([value, text]) => `<option value="${value}" ${filters.deterioration_type === value ? "selected" : ""}>${text}</option>`).join("")}</select></div>
+    <div class="footer-actions full"><button class="btn primary" type="submit">تطبيق الفلاتر</button><button class="btn" type="button" onclick="clearResearchExportFilters()">إلغاء الفلاتر</button></div>
+  </form>`;
+}
+
+function renderExportButtons() {
+  if (!hasPermission("research:export")) {
+    return `<div class="state-message warning"><strong>ليست لديك صلاحية تصدير البيانات البحثية</strong><span>استخدم الدور التجريبي Admin أو Researcher لاختبار التصدير قبل مرحلة المصادقة.</span></div>`;
+  }
+  return `<div class="footer-actions">
+    <button class="btn primary" onclick="downloadResearchExport('csv')">تصدير CSV</button>
+    <button class="btn primary" onclick="downloadResearchExport('xlsx')">تصدير Excel</button>
+    <button class="btn" onclick="downloadResearchExport('spss-codebook')">تحميل Codebook لـ SPSS</button>
+    <button class="btn" onclick="downloadResearchExport('spss-variable-labels')">تحميل Variable Labels لـ SPSS</button>
+  </div><p class="kpi-meta">تم تجهيز ملف التصدير من API حقيقي مع استبعاد الأسماء ومعلومات الاتصال وكلمات المرور.</p>`;
+}
+
+function renderQualityPanel(quality) {
+  return `<div class="grid cols-2">
+    ${renderKpi(["درجة جودة البيانات", `${quality.qualityScore ?? 0}%`, "قابلة للمراجعة", (quality.qualityScore || 0) >= 80 ? "success" : "warning"])}
+    ${renderKpi(["عدد السجلات", quality.totalRows ?? 0, "Dataset rows", "info"])}
+    ${renderKpi(["عدد المشاكل", quality.issuesCount ?? 0, "مشاكل البيانات", (quality.issuesCount || 0) ? "warning" : "success"])}
+  </div>${renderQualityIssuesTable(quality.issuesByType || {})}`;
+}
+
+function renderQualityIssuesTable(issuesByType) {
+  const rows = Object.entries(issuesByType).map(([type, count]) => [qualityIssueLabel(type), count]);
+  return rows.length ? renderTable(["المشاكل حسب النوع", "العدد"], rows) : emptyBlock("لا توجد مشاكل جودة ظاهرة");
+}
+
+function renderQualityWarnings(warnings) {
+  if (!warnings.length) return emptyBlock("لا توجد تنبيهات جودة قبل التصدير");
+  return `<div class="timeline">${warnings.map((warning) => `<div class="timeline-item"><strong>تنبيه جودة</strong><span>${escapeHtml(warning)}</span></div>`).join("")}</div>`;
+}
+
+function datasetPreviewRow(row) {
+  return [
+    row.patientCode,
+    row.sessionDate,
+    formatDateTime(row.measurementTime),
+    row.news2TotalScore,
+    badge(riskLevelLabel(row.riskLevel), riskTone(row.riskLevel), row.riskLevel === "high" || row.riskLevel === "critical"),
+    row.alertCreated ? "نعم" : "لا",
+    label(labels.deteriorationType, row.deteriorationType),
+    minuteText(row.responseDelayMinutes),
+    label(labels.outcomeType, row.outcomeType),
+    label(labels.studyPhase, row.studyPhase),
+    label(labels.studyGroup, row.studyGroup)
+  ];
+}
+
+function qualityIssueLabel(type) {
+  return label({
+    missing_patient_code: "رمز المريض مفقود",
+    missing_session: "الجلسة مفقودة",
+    missing_measurement_time: "وقت القياس مفقود",
+    missing_news2_total_score: "درجة NEWS2 مفقودة",
+    invalid_timestamp_sequence: "تسلسل زمني غير صالح",
+    missing_outcome_for_deterioration: "مآل مفقود بعد التدهور",
+    alert_without_response: "تنبيه بدون استجابة",
+    response_without_tracking: "استجابة بدون تتبع",
+    duplicate_dataset_rows: "سجلات مكررة"
+  }, type);
+}
+
+async function submitResearchExportFilters(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  appState.researchExportFilters = Object.fromEntries([...data.entries()].filter(([, value]) => value !== ""));
+  appState.loading.researchDatasetRows = true;
+  appState.loading.researchDatasetQuality = true;
+  appState.errors.researchDatasetRows = null;
+  appState.errors.researchDatasetQuality = null;
+  render();
+  try {
+    appState.researchDatasetRows = await api.getResearchDataset(appState.researchExportFilters);
+    appState.researchDatasetQuality = await api.getResearchDatasetQuality(appState.researchExportFilters);
+  } catch (error) {
+    appState.errors.researchDatasetRows = error.message || "تعذر تحميل البيانات البحثية";
+  } finally {
+    appState.loading.researchDatasetRows = false;
+    appState.loading.researchDatasetQuality = false;
+    render();
+  }
+}
+
+async function clearResearchExportFilters() {
+  appState.researchExportFilters = {};
+  appState.researchDatasetRows = [];
+  appState.researchDatasetQuality = null;
+  await Promise.all([
+    loadResource("researchDatasetRows", () => api.getResearchDataset({})),
+    loadResource("researchDatasetQuality", () => api.getResearchDatasetQuality({}))
+  ]);
+}
+
+function downloadResearchExport(format) {
+  if (!hasPermission("research:export")) {
+    appState.errors.researchDatasetRows = "ليست لديك صلاحية تصدير البيانات البحثية";
+    render();
+    return;
+  }
+  const endpoints = {
+    csv: "/api/research/export/csv",
+    xlsx: "/api/research/export/xlsx",
+    "spss-codebook": "/api/research/export/spss-codebook",
+    "spss-variable-labels": "/api/research/export/spss-variable-labels"
+  };
+  const endpoint = endpoints[format];
+  if (!endpoint) return;
+  window.location.href = `${endpoint}${queryString(appState.researchExportFilters || {})}`;
+}
+
+function renderResearchAnalyticsDashboard() {
+  if (appState.loading.researchAnalyticsSummary) return loadingBlock("جاري تحميل التحليلات البحثية...");
+  if (appState.errors.researchAnalyticsSummary) return errorBlock("researchAnalyticsSummary");
+  const analytics = appState.researchAnalyticsSummary;
+  if (!analytics) return emptyBlock("لا توجد بيانات كافية للتحليل");
+  const k = analytics.kpis || {};
+  const outcome = analytics.outcomeAnalysis || {};
+  const response = analytics.responseTimeAnalysis || {};
+  return `<div class="dashboard-hero">
+    <div class="hero-band">
+      <h2>لوحة التحليلات البحثية</h2>
+      <p>تحليلات وصفية مبنية على Dataset البحثية دون اختبارات استدلالية أو تنبؤات.</p>
+    </div>
+    <div class="status-panel">
+      ${renderKpi(["جاهزية البحث", k.export_readiness || "needs_review", "جاهزية التصدير", k.export_readiness === "ready" ? "success" : "warning"])}
+      ${renderKpi(["جودة البيانات", `${k.dataset_quality_score ?? 0}%`, "Dataset Quality", (k.dataset_quality_score || 0) >= 80 ? "success" : "warning"])}
+    </div>
+  </div>
+  <div class="grid cols-4">
+    ${renderKpi(["عدد المرضى", k.total_patients ?? 0, "patients", "info"])}
+    ${renderKpi(["عدد الجلسات", k.total_sessions ?? 0, "sessions", "info"])}
+    ${renderKpi(["عدد القياسات", k.total_measurements ?? 0, "measurements", "info"])}
+    ${renderKpi(["عدد تقييمات NEWS2", k.total_news2_assessments ?? 0, "NEWS2", "info"])}
+    ${renderKpi(["عدد التنبيهات", k.total_alerts ?? 0, "alerts", (k.total_alerts || 0) ? "warning" : "success"])}
+    ${renderKpi(["عدد أحداث التدهور", k.total_deterioration_events ?? 0, "events", (k.total_deterioration_events || 0) ? "warning" : "success"])}
+    ${renderKpi(["عدد الاستجابات", k.total_responses ?? 0, "responses", "info"])}
+    ${renderKpi(["عدد المآلات", k.total_outcomes ?? 0, "outcomes", "success"])}
+    ${renderKpi(["متوسط NEWS2", k.average_news2_score ?? "-", "descriptive", (k.average_news2_score || 0) >= 7 ? "danger" : "info"])}
+    ${renderKpi(["متوسط زمن الاستجابة", minuteText(k.average_response_time_minutes), "minutes", responseTone(k.average_response_time_minutes)])}
+    ${renderKpi(["معدل التدهور", `${k.deterioration_rate ?? 0}%`, "events / sessions", (k.deterioration_rate || 0) ? "warning" : "success"])}
+    ${renderKpi(["اكتمال الاستجابات", `${k.response_completion_rate ?? 0}%`, "responses / alerts", (k.response_completion_rate || 0) >= 80 ? "success" : "warning"])}
+    ${renderKpi(["اكتمال المآلات", `${k.outcome_completion_rate ?? 0}%`, "outcomes / events", (k.outcome_completion_rate || 0) >= 80 ? "success" : "warning"])}
+  </div>
+  <div class="grid cols-2" style="margin-top:16px">
+    ${card("تحليل NEWS2", renderDistributionTable(["الفئة", "العدد", "النسبة"], analytics.news2Distribution, "label"))}
+    ${card("NEWS2 Score Distribution", renderBarChart((analytics.news2Distribution || []).map((item) => item.count || 0)))}
+    ${card("تحليل المآلات", renderOutcomeAnalysisTable(outcome))}
+    ${card("Outcome Distribution", renderBarChart((outcome.distribution || []).map((item) => item.count || 0)))}
+    ${card("تحليل الاستجابة", renderResponseAnalysisTable(response))}
+    ${card("Response Time Metrics", renderBarChart([response.average_time_to_alert || 0, response.average_time_to_view || 0, response.average_time_to_response || 0, response.average_time_to_action || 0, response.average_total_response_time || 0]))}
+    ${card("تحليل التدهور السريري", renderDeteriorationAnalyticsTable(analytics.deteriorationAnalysis || []))}
+    ${card("Deterioration Type Distribution", renderBarChart((analytics.deteriorationAnalysis || []).map((item) => item.count || 0)))}
+    ${card("Risk Analytics", renderRiskAnalyticsTable(analytics.riskLevelDistribution || []))}
+    ${card("مقارنة المجموعات", renderGroupComparisonTable(analytics.groupComparison || {}))}
+  </div>
+  <div style="margin-top:16px">${card("Research Readiness", renderTable(["المؤشر", "القيمة"], [["Dataset Quality", `${k.dataset_quality_score ?? 0}%`], ["Outcome Completion", `${k.outcome_completion_rate ?? 0}%`], ["Response Completion", `${k.response_completion_rate ?? 0}%`], ["Export Readiness", k.export_readiness || "needs_review"], ["Alerts per 100 sessions", k.alerts_per_100_sessions ?? 0]]))}</div>`;
+}
+
+function renderDistributionTable(headers, items, labelKey) {
+  const rows = (items || []).map((item) => [item[labelKey] || item.bucket || item.risk_level || "-", item.count ?? 0, `${item.percentage ?? 0}%`]);
+  return rows.length ? renderTable(headers, rows) : emptyBlock("لا توجد بيانات كافية للتحليل");
+}
+
+function renderOutcomeAnalysisTable(outcome) {
+  const rows = (outcome.distribution || []).map((item) => [label(labels.outcomeType, item.outcome_type), item.count ?? 0, `${item.percentage ?? 0}%`]);
+  rows.push(["Good outcome rate", `${outcome.good_outcome_rate ?? 0}%`, "stable_completed_session"]);
+  rows.push(["Adverse outcome rate", `${outcome.adverse_outcome_rate ?? 0}%`, "admission / transfer / ICU / death"]);
+  return rows.length ? renderTable(["المآل", "القيمة", "النسبة / الملاحظة"], rows) : emptyBlock("لا توجد مآلات للتحليل");
+}
+
+function renderResponseAnalysisTable(response) {
+  return renderTable(["المؤشر", "الدقائق"], [
+    ["average_time_to_alert", minuteText(response.average_time_to_alert)],
+    ["average_time_to_view", minuteText(response.average_time_to_view)],
+    ["average_time_to_response", minuteText(response.average_time_to_response)],
+    ["average_time_to_action", minuteText(response.average_time_to_action)],
+    ["average_total_response_time", minuteText(response.average_total_response_time)],
+    ["fastest_response", minuteText(response.fastest_response)],
+    ["slowest_response", minuteText(response.slowest_response)],
+    ["median_response", minuteText(response.median_response)]
+  ]);
+}
+
+function renderDeteriorationAnalyticsTable(items) {
+  const rows = items.map((item) => [label(labels.deteriorationType, item.deterioration_type), item.count ?? 0, `${item.percentage ?? 0}%`, Object.entries(item.associated_outcomes || {}).filter(([, count]) => count).map(([key, count]) => `${label(labels.outcomeType, key)}: ${count}`).join(", ") || "-"]);
+  return rows.length ? renderTable(["نوع التدهور", "العدد", "النسبة", "المآلات المرتبطة"], rows) : emptyBlock("لا توجد أحداث تدهور للتحليل");
+}
+
+function renderRiskAnalyticsTable(items) {
+  const rows = items.map((item) => [riskLevelLabel(item.risk_level), item.count ?? 0, `${item.percentage ?? 0}%`, minuteText(item.average_response_time)]);
+  return rows.length ? renderTable(["مستوى الخطورة", "العدد", "النسبة", "متوسط الاستجابة"], rows) : emptyBlock("لا توجد بيانات خطورة للتحليل");
+}
+
+function renderGroupComparisonTable(groupComparison) {
+  const studyGroup = groupComparison.study_group || {};
+  const groupA = studyGroup.group_a || {};
+  const groupB = studyGroup.group_b || {};
+  return renderTable(["المجموعة", "العدد", "متوسط NEWS2", "متوسط الاستجابة"], [
+    [groupA.name || "-", groupA.count ?? 0, groupA.average_news2 ?? "-", minuteText(groupA.average_response_time)],
+    [groupB.name || "-", groupB.count ?? 0, groupB.average_news2 ?? "-", minuteText(groupB.average_response_time)]
+  ]);
+}
+
+function renderStudyCenter(route) {
+  if (appState.loading.studyCenter) return loadingBlock("جاري تحميل مركز إدارة الدراسة...");
+  if (appState.errors.studyCenter) return errorBlock("studyCenter");
+  const study = currentStudy();
+  if (route.id === "research-protocol") return renderResearchProtocol(study);
+  if (route.id === "study-timeline") return renderStudyTimeline(study);
+  if (route.id === "study-readiness") return renderStudyReadiness(study);
+  return renderStudyManagement(study);
+}
+
+function currentStudy() {
+  return appState.studies.find((study) => study.id === appState.selectedStudyId) || appState.studies[0] || null;
+}
+
+function renderStudyManagement(study) {
+  const readiness = appState.studyReadiness;
+  const dashboard = readiness?.dashboard || {};
+  return `<div class="dashboard-hero">
+    <div class="hero-band"><h2>${escapeHtml(study?.studyTitle || "مركز إدارة الدراسة")}</h2><p>طبقة حوكمة بحثية لتعريف البروتوكول ومراقبة جاهزية Dataset والتحليلات والتصدير والمآلات.</p></div>
+    <div class="status-panel">${renderKpi(["درجة الجاهزية", `${readiness?.readinessScore ?? 0}%`, "Study Readiness", readinessTone(readiness?.readinessScore ?? 0)])}${renderKpi(["حالة الدراسة", label(labels.studyStatus, study?.studyStatus), "research_studies", study?.studyStatus === "active" ? "success" : "warning"])}</div>
+  </div>
+  <div class="grid cols-4">
+    ${renderKpi(["عنوان الدراسة", study?.studyTitle || "-", "Study Title", "info"])}
+    ${renderKpi(["الباحث الرئيسي", study?.principalInvestigator || "-", "Principal Investigator", "info"])}
+    ${renderKpi(["تصميم الدراسة", label(labels.studyDesign, study?.studyDesign), "Study Design", "info"])}
+    ${renderKpi(["حجم العينة المستهدف", dashboard.target_sample_size ?? study?.targetSampleSize ?? "-", "Target Sample Size", "info"])}
+    ${renderKpi(["المرضى الحاليون", dashboard.current_patients ?? 0, "Current Patients", "info"])}
+    ${renderKpi(["صفوف Dataset", dashboard.dataset_rows ?? 0, "Dataset Rows", "info"])}
+    ${renderKpi(["حالة التحليلات", readinessStatusLabel(dashboard.analytics_status), "Analytics Status", dashboard.analytics_status === "ready" ? "success" : "warning"])}
+    ${renderKpi(["جاهزية التصدير", readinessStatusLabel(dashboard.export_readiness), "Export Readiness", dashboard.export_readiness === "ready" ? "success" : "warning"])}
+  </div>
+  <div class="grid cols-2" style="margin-top:16px">
+    ${card("إعداد البروتوكول", renderStudyForm(study))}
+    ${card("الدراسات المسجلة", renderStudiesTable())}
+    ${card("جاهزية البحث", renderReadinessChecks(readiness))}
+    ${card("توصيات الجاهزية", renderReadinessList(readiness?.recommendations || [], "لا توجد توصيات تشغيلية حالية"))}
+  </div>`;
+}
+
+function renderResearchProtocol(study) {
+  const protocol = appState.studyReadiness?.protocol || {};
+  return `<div class="grid cols-2">
+    ${card("هدف الدراسة", renderTable(["البند", "القيمة"], [["Study Objective", protocol.study_objective || study?.studyDescription || "-"], ["Study Design", label(labels.studyDesign, protocol.study_design || study?.studyDesign)], ["Baseline Period", periodText(study?.baselinePeriodStart, study?.baselinePeriodEnd)], ["Intervention Period", periodText(study?.interventionPeriodStart, study?.interventionPeriodEnd)]]))}
+    ${card("معايير وملاحظات البحث", renderTable(["البند", "القيمة"], [["Inclusion Notes", study?.inclusionNotes || "-"], ["Exclusion Notes", study?.exclusionNotes || "-"], ["Research Notes", study?.notes || "-"]]))}
+  </div>`;
+}
+
+function renderStudyTimeline(study) {
+  const timeline = appState.studyReadiness?.timeline || {};
+  const items = [["Study Start", timeline.study_start || study?.studyStartDate], ["Baseline Period", periodText(study?.baselinePeriodStart, study?.baselinePeriodEnd)], ["Intervention Period", periodText(study?.interventionPeriodStart, study?.interventionPeriodEnd)], ["Current Date", timeline.current_date], ["Study End", timeline.study_end || study?.studyEndDate]];
+  return card("الخط الزمني للدراسة", `<div class="timeline">${items.map(([title, value]) => `<div class="timeline-item"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(value || "-")}</span></div>`).join("")}</div>`);
+}
+
+function renderStudyReadiness(study) {
+  const readiness = appState.studyReadiness;
+  return `<div class="grid cols-3">
+    ${renderKpi(["Dataset Ready", yesNo(readiness?.checks?.dataset_available), "Dataset", readiness?.checks?.dataset_available ? "success" : "warning"])}
+    ${renderKpi(["Analytics Ready", yesNo(readiness?.checks?.analytics_available), "Analytics", readiness?.checks?.analytics_available ? "success" : "warning"])}
+    ${renderKpi(["Exports Ready", yesNo(readiness?.checks?.exports_available), "Exports", readiness?.checks?.exports_available ? "success" : "warning"])}
+    ${renderKpi(["Outcomes Ready", yesNo(readiness?.checks?.outcomes_available), "Outcomes", readiness?.checks?.outcomes_available ? "success" : "warning"])}
+    ${renderKpi(["Tracking Ready", yesNo(readiness?.checks?.response_tracking_available), "Tracking", readiness?.checks?.response_tracking_available ? "success" : "warning"])}
+    ${renderKpi(["Overall Readiness", `${readiness?.readinessScore ?? 0}%`, study?.studyTitle || "Study", readinessTone(readiness?.readinessScore ?? 0)])}
+  </div>
+  <div class="grid cols-2" style="margin-top:16px">
+    ${card("تفاصيل الجاهزية", renderReadinessChecks(readiness))}
+    ${card("المتطلبات الناقصة", renderReadinessList((readiness?.missingRequirements || []).map((item) => label(labels.readinessCheck, item)), "لا توجد متطلبات ناقصة"))}
+    ${card("تحذيرات", renderReadinessList(readiness?.warnings || [], "لا توجد تحذيرات جاهزية"))}
+    ${card("توصيات", renderReadinessList(readiness?.recommendations || [], "لا توجد توصيات حالية"))}
+  </div>`;
+}
+
+function renderStudyForm(study) {
+  const canManageStudy = study ? hasPermission("studies:update") : hasPermission("studies:create");
+  return `<form class="form-grid" onsubmit="submitStudyForm(event)">
+    <div class="field"><label>رمز الدراسة</label><input name="study_code" required value="${escapeHtml(study?.studyCode || "NEWS2-HD-001")}"></div>
+    <div class="field"><label>عنوان الدراسة</label><input name="study_title" required value="${escapeHtml(study?.studyTitle || "")}"></div>
+    <div class="field"><label>الباحث الرئيسي</label><input name="principal_investigator" value="${escapeHtml(study?.principalInvestigator || "")}"></div>
+    <div class="field"><label>تصميم الدراسة</label><select name="study_design">${Object.entries(labels.studyDesign).map(([value, text]) => `<option value="${value}" ${study?.studyDesign === value ? "selected" : ""}>${text}</option>`).join("")}</select></div>
+    <div class="field"><label>حالة الدراسة</label><select name="study_status">${Object.entries(labels.studyStatus).map(([value, text]) => `<option value="${value}" ${study?.studyStatus === value ? "selected" : ""}>${text}</option>`).join("")}</select></div>
+    <div class="field"><label>حجم العينة المستهدف</label><input name="target_sample_size" type="number" min="1" value="${escapeHtml(study?.targetSampleSize || "")}"></div>
+    <div class="field"><label>بداية الدراسة</label><input name="study_start_date" type="date" value="${escapeHtml(study?.studyStartDate || "")}"></div>
+    <div class="field"><label>نهاية الدراسة</label><input name="study_end_date" type="date" value="${escapeHtml(study?.studyEndDate || "")}"></div>
+    <div class="field"><label>بداية خط الأساس</label><input name="baseline_period_start" type="date" value="${escapeHtml(study?.baselinePeriodStart || "")}"></div>
+    <div class="field"><label>نهاية خط الأساس</label><input name="baseline_period_end" type="date" value="${escapeHtml(study?.baselinePeriodEnd || "")}"></div>
+    <div class="field"><label>بداية التدخل</label><input name="intervention_period_start" type="date" value="${escapeHtml(study?.interventionPeriodStart || "")}"></div>
+    <div class="field"><label>نهاية التدخل</label><input name="intervention_period_end" type="date" value="${escapeHtml(study?.interventionPeriodEnd || "")}"></div>
+    <div class="field full"><label>وصف الدراسة</label><textarea name="study_description">${escapeHtml(study?.studyDescription || "")}</textarea></div>
+    <div class="field full"><label>ملاحظات الاشتمال</label><textarea name="inclusion_notes">${escapeHtml(study?.inclusionNotes || "")}</textarea></div>
+    <div class="field full"><label>ملاحظات الاستبعاد</label><textarea name="exclusion_notes">${escapeHtml(study?.exclusionNotes || "")}</textarea></div>
+    <div class="field full"><label>ملاحظات البحث</label><textarea name="notes">${escapeHtml(study?.notes || "")}</textarea></div>
+    ${appState.studySubmission ? `<div class="state-message success full"><strong>${escapeHtml(appState.studySubmission)}</strong></div>` : ""}
+    <div class="footer-actions full"><button class="btn primary" type="submit">${study ? "تحديث الدراسة" : "إنشاء الدراسة"}</button></div>
+  </form>`;
+}
+
+function renderStudiesTable() {
+  const rows = appState.studies.map((study) => [study.studyCode, study.studyTitle, study.principalInvestigator, label(labels.studyDesign, study.studyDesign), badge(label(labels.studyStatus, study.studyStatus), study.studyStatus === "active" ? "success" : "warning")]);
+  return rows.length ? renderTable(["الرمز", "العنوان", "الباحث", "التصميم", "الحالة"], rows) : emptyBlock("لا توجد دراسة معرفة حتى الآن");
+}
+
+function renderReadinessChecks(readiness) {
+  const checks = readiness?.checks || {};
+  const rows = Object.entries(labels.readinessCheck).map(([key, text]) => [text, yesNo(checks[key]), badge(checks[key] ? "جاهز" : "غير مكتمل", checks[key] ? "success" : "warning")]);
+  return renderTable(["المتطلب", "الحالة", "المؤشر"], rows);
+}
+
+function renderReadinessList(items, emptyText) {
+  if (!items.length) return emptyBlock(emptyText);
+  return `<div class="timeline">${items.map((item) => `<div class="timeline-item"><strong>${escapeHtml(item)}</strong></div>`).join("")}</div>`;
+}
+
+function readinessTone(score) {
+  if (score >= 80) return "success";
+  if (score >= 50) return "warning";
+  return "danger";
+}
+
+function readinessStatusLabel(value) {
+  return label({ ready: "جاهز", needs_review: "يحتاج مراجعة", not_ready: "غير جاهز" }, value);
+}
+
+function yesNo(value) {
+  return value ? "نعم" : "لا";
+}
+
+function periodText(start, end) {
+  return `${start || "-"} / ${end || "-"}`;
+}
+
+async function submitStudyForm(event) {
+  event.preventDefault();
+  const study = currentStudy();
+  if (study ? !hasPermission("studies:update") : !hasPermission("studies:create")) {
+    appState.errors.studyCenter = "ليست لديك صلاحية تعديل إعدادات الدراسة";
+    render();
+    return;
+  }
+  const data = new FormData(event.currentTarget);
+  const payload = Object.fromEntries([...data.entries()].filter(([, value]) => value !== ""));
+  if (payload.target_sample_size) payload.target_sample_size = Number(payload.target_sample_size);
+  appState.loading.studyCenter = true;
+  appState.errors.studyCenter = null;
+  render();
+  try {
+    const saved = study ? await api.updateStudy(study.id, payload) : await api.createStudy(payload);
+    appState.selectedStudyId = saved.id;
+    appState.studySubmission = "تم حفظ إعدادات الدراسة";
+    appState.studyCenter = await loadStudyCenter();
+  } catch (error) {
+    appState.errors.studyCenter = error.message || "تعذر حفظ إعدادات الدراسة";
+  } finally {
+    appState.loading.studyCenter = false;
+    render();
+  }
+}
+
+function renderPermissions() {
+  const matrix = appState.permissionMatrix || { roles: [], permissions: [] };
+  const roles = matrix.roles || [];
+  const headers = ["الصلاحية", ...roles.map((role) => role.role_label || role.role)];
+  const rows = (matrix.permissions || []).map((permission) => [
+    permission,
+    ...roles.map((role) => (role.permissions || []).includes(permission) ? badge("مسموح", "success") : badge("ممنوع", "warning"))
+  ]);
+  return `<div class="grid cols-2">${renderKpi(["الدور الحالي", appState.currentRoleLabel, "X-Dev-Role", "info"])}${renderKpi(["عدد الصلاحيات", appState.permissions.length, "Current permissions", "info"])}</div><div style="margin-top:16px">${card("مصفوفة الصلاحيات", rows.length ? renderTable(headers, rows) : emptyBlock("لم يتم تحميل مصفوفة الصلاحيات"))}</div>`;
+}
+
+function renderRolesMatrix() {
+  const roles = appState.permissionMatrix?.roles || [];
+  const rows = roles.map((role) => [role.role, role.role_label, (role.permissions || []).length, role.role === appState.currentRole ? badge("الدور الحالي", "info") : "-"]);
+  return card("الأدوار", rows.length ? renderTable(["الدور", "التسمية", "عدد الصلاحيات", "الحالة"], rows) : emptyBlock("لم يتم تحميل الأدوار بعد"));
+}
+
+async function changeDevRole(role) {
+  appState.currentRole = role;
+  localStorage.setItem("news2DevRole", role);
+  appState.researchDatasetRows = [];
+  appState.researchDatasetQuality = null;
+  appState.researchAnalyticsSummary = null;
+  appState.studyCenter = null;
+  appState.studyReadiness = null;
+  await loadRbacContext();
+  const route = routes.find((item) => item.id === currentRoute());
+  if (route) ensureDataForRoute(route);
+}
+
+function renderStudyForm(study) {
+  const canManageStudy = study ? hasPermission("studies:update") : hasPermission("studies:create");
+  return `<form class="form-grid" onsubmit="submitStudyForm(event)">
+    <div class="field"><label>رمز الدراسة</label><input name="study_code" required value="${escapeHtml(study?.studyCode || "NEWS2-HD-001")}"></div>
+    <div class="field"><label>عنوان الدراسة</label><input name="study_title" required value="${escapeHtml(study?.studyTitle || "")}"></div>
+    <div class="field"><label>الباحث الرئيسي</label><input name="principal_investigator" value="${escapeHtml(study?.principalInvestigator || "")}"></div>
+    <div class="field"><label>تصميم الدراسة</label><select name="study_design">${Object.entries(labels.studyDesign).map(([value, text]) => `<option value="${value}" ${study?.studyDesign === value ? "selected" : ""}>${text}</option>`).join("")}</select></div>
+    <div class="field"><label>حالة الدراسة</label><select name="study_status">${Object.entries(labels.studyStatus).map(([value, text]) => `<option value="${value}" ${study?.studyStatus === value ? "selected" : ""}>${text}</option>`).join("")}</select></div>
+    <div class="field"><label>حجم العينة المستهدف</label><input name="target_sample_size" type="number" min="1" value="${escapeHtml(study?.targetSampleSize || "")}"></div>
+    <div class="field"><label>بداية الدراسة</label><input name="study_start_date" type="date" value="${escapeHtml(study?.studyStartDate || "")}"></div>
+    <div class="field"><label>نهاية الدراسة</label><input name="study_end_date" type="date" value="${escapeHtml(study?.studyEndDate || "")}"></div>
+    <div class="field"><label>بداية خط الأساس</label><input name="baseline_period_start" type="date" value="${escapeHtml(study?.baselinePeriodStart || "")}"></div>
+    <div class="field"><label>نهاية خط الأساس</label><input name="baseline_period_end" type="date" value="${escapeHtml(study?.baselinePeriodEnd || "")}"></div>
+    <div class="field"><label>بداية التدخل</label><input name="intervention_period_start" type="date" value="${escapeHtml(study?.interventionPeriodStart || "")}"></div>
+    <div class="field"><label>نهاية التدخل</label><input name="intervention_period_end" type="date" value="${escapeHtml(study?.interventionPeriodEnd || "")}"></div>
+    <div class="field full"><label>وصف الدراسة</label><textarea name="study_description">${escapeHtml(study?.studyDescription || "")}</textarea></div>
+    <div class="field full"><label>ملاحظات الاشتمال</label><textarea name="inclusion_notes">${escapeHtml(study?.inclusionNotes || "")}</textarea></div>
+    <div class="field full"><label>ملاحظات الاستبعاد</label><textarea name="exclusion_notes">${escapeHtml(study?.exclusionNotes || "")}</textarea></div>
+    <div class="field full"><label>ملاحظات البحث</label><textarea name="notes">${escapeHtml(study?.notes || "")}</textarea></div>
+    ${appState.studySubmission ? `<div class="state-message success full"><strong>${escapeHtml(appState.studySubmission)}</strong></div>` : ""}
+    ${canManageStudy ? "" : `<div class="state-message warning full"><strong>ليست لديك صلاحية تعديل إعدادات الدراسة</strong></div>`}
+    <div class="footer-actions full"><button class="btn primary" type="submit" ${canManageStudy ? "" : "disabled"}>${study ? "تحديث الدراسة" : "إنشاء الدراسة"}</button></div>
+  </form>`;
+}
+
 function render() {
   document.body.classList.remove("nav-open");
   const id = currentRoute();
@@ -646,6 +2352,16 @@ function render() {
 }
 
 window.setRoute = setRoute;
+window.calculateNews2Demo = calculateNews2Demo;
+window.submitMonitoringMeasurement = submitMonitoringMeasurement;
+window.submitDeteriorationEvent = submitDeteriorationEvent;
+window.submitClinicalResponse = submitClinicalResponse;
+window.submitResearchExportFilters = submitResearchExportFilters;
+window.clearResearchExportFilters = clearResearchExportFilters;
+window.downloadResearchExport = downloadResearchExport;
+window.submitStudyForm = submitStudyForm;
+window.changeDevRole = changeDevRole;
 window.addEventListener("hashchange", render);
 loadHealth();
+loadRbacContext();
 render();

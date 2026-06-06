@@ -43,6 +43,11 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 :focus-visible {
   outline: 3px solid rgba(14, 165, 233, 0.45);
   outline-offset: 2px;
@@ -221,6 +226,26 @@ button {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.dev-role-switcher {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dev-role-switcher select {
+  min-height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
 }
 
 .icon-btn,

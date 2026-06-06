@@ -1,5 +1,6 @@
 from datetime import date, datetime
-from pydantic import BaseModel, ConfigDict, EmailStr
+from typing import Literal
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class UserRead(BaseModel):
@@ -47,12 +48,17 @@ class AlertRead(BaseModel):
     patient_id: int
     patient_code: str | None = None
     dialysis_session_id: int
+    news2_assessment_id: int | None = None
     risk_level: str
     severity_level: str
     status: str
     priority: str | None = None
     trigger_reason: str | None = None
     created_at: datetime
+    viewed_at: datetime | None = None
+    acknowledged_at: datetime | None = None
+    action_taken_at: datetime | None = None
+    closed_at: datetime | None = None
 
 
 class ResearchSummary(BaseModel):
@@ -63,6 +69,478 @@ class ResearchSummary(BaseModel):
     alerts_count: int
     active_alerts_count: int
     deterioration_events_count: int
+    acute_hypotension_count: int = 0
+    suspected_sepsis_or_fever_count: int = 0
+    arrhythmia_count: int = 0
+    seizures_count: int = 0
+    reduced_consciousness_count: int = 0
     responses_count: int
+    clinical_responses_count: int = 0
+    average_response_delay_minutes: float | None = None
+    fastest_response_delay_minutes: int | None = None
+    slowest_response_delay_minutes: int | None = None
+    average_time_to_alert_minutes: float | None = None
+    average_time_to_response_minutes: float | None = None
+    fastest_response_minutes: int | None = None
+    slowest_response_minutes: int | None = None
+    alerts_without_response_count: int = 0
     outcomes_count: int
+    total_outcomes: int = 0
+    stable_completed_session_count: int = 0
+    session_stopped_early_count: int = 0
+    hospital_admission_count: int = 0
+    emergency_department_transfer_count: int = 0
+    icu_admission_count: int = 0
+    death_count: int = 0
+    research_dataset_rows: int = 0
+    dataset_quality_score: int = 0
+    missing_outcomes_count: int = 0
+    export_readiness: str = "not_ready"
     average_news2: float | None = None
+
+
+class NEWS2CalculationRequest(BaseModel):
+    respiratory_rate: int = Field(gt=0, le=80)
+    spo2: int = Field(ge=0, le=100)
+    oxygen_therapy: bool = False
+    systolic_bp: int = Field(gt=0, le=300)
+    pulse_rate: int = Field(gt=0, le=300)
+    temperature: float = Field(ge=25.0, le=45.0)
+    consciousness_level: Literal["alert", "voice", "pain", "unresponsive", "new_confusion"]
+    spo2_scale: Literal["scale_1", "scale_2"] = "scale_1"
+
+    @field_validator("temperature")
+    @classmethod
+    def validate_temperature_precision(cls, value: float) -> float:
+        return round(value, 1)
+
+
+class NEWS2ComponentScores(BaseModel):
+    respiratory_score: int
+    spo2_score: int
+    oxygen_score: int
+    systolic_bp_score: int
+    pulse_score: int
+    temperature_score: int
+    consciousness_score: int
+
+
+class NEWS2CalculationResult(NEWS2ComponentScores):
+    total_score: int
+    risk_level: Literal["low", "medium", "high"]
+    alert_required: bool
+    single_parameter_trigger: bool
+    trigger_reason: str
+
+
+class MonitoringMeasurementCreate(BaseModel):
+    patient_id: int = Field(gt=0)
+    dialysis_session_id: int = Field(gt=0)
+    measurement_time: datetime
+    measurement_interval_minutes: int = Field(gt=0, le=1440)
+    respiratory_rate: int = Field(gt=0, le=80)
+    spo2: int = Field(ge=0, le=100)
+    oxygen_therapy: bool = False
+    systolic_bp: int = Field(gt=0, le=300)
+    diastolic_bp: int = Field(gt=0, le=200)
+    pulse_rate: int = Field(gt=0, le=300)
+    temperature: float = Field(ge=25.0, le=45.0)
+    consciousness_level: Literal["alert", "voice", "pain", "unresponsive", "new_confusion"]
+    confusion_status: bool | str | None = None
+    spo2_scale: Literal["scale_1", "scale_2"] = "scale_1"
+    recorded_by_user_id: int | None = Field(default=None, gt=0)
+
+    @field_validator("temperature")
+    @classmethod
+    def validate_monitoring_temperature_precision(cls, value: float) -> float:
+        return round(value, 1)
+
+
+class MonitoringMeasurementRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    patient_id: int
+    dialysis_session_id: int
+    measurement_time: datetime
+    measurement_interval_minutes: int | None = None
+    respiratory_rate: int | None = None
+    spo2: int | None = None
+    oxygen_therapy: bool
+    systolic_bp: int | None = None
+    diastolic_bp: int | None = None
+    pulse_rate: int | None = None
+    temperature: float | None = None
+    consciousness_level: str | None = None
+    confusion_status: str | None = None
+    recorded_by_user_id: int | None = None
+    created_at: datetime
+
+
+class NEWS2AssessmentRead(NEWS2ComponentScores):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    patient_id: int
+    dialysis_session_id: int
+    intradialytic_measurement_id: int
+    total_score: int
+    risk_level: str
+    alert_required: bool
+    single_parameter_trigger: bool = False
+    trigger_reason: str | None = None
+    created_by_user_id: int | None = None
+    created_at: datetime
+
+
+class MonitoringMeasurementResult(BaseModel):
+    measurement: MonitoringMeasurementRead
+    news2_assessment: NEWS2AssessmentRead
+    alert: "AlertCreationResult | None" = None
+    message: str
+
+
+class AlertCreationResult(BaseModel):
+    alert_created: bool
+    alert_id: int | None = None
+    reused_existing: bool = False
+    status: str | None = None
+    risk_level: str | None = None
+    severity_level: str | None = None
+    priority: str | None = None
+    trigger_reason: str | None = None
+
+
+class ClinicalDeteriorationEventCreate(BaseModel):
+    alert_id: int = Field(gt=0)
+    deterioration_time: datetime
+    deterioration_type: Literal[
+        "acute_hypotension",
+        "suspected_sepsis_or_fever",
+        "arrhythmia",
+        "seizures",
+        "reduced_consciousness",
+        "other",
+    ]
+    description: str | None = Field(default=None, max_length=4000)
+    created_by_user_id: int | None = Field(default=None, gt=0)
+
+
+class ClinicalDeteriorationEventRead(BaseModel):
+    id: int
+    patient_id: int
+    patient_code: str | None = None
+    dialysis_session_id: int
+    session_date: date | None = None
+    news2_assessment_id: int
+    news2_total_score: int
+    alert_id: int
+    alert_status: str
+    risk_level: str | None = None
+    deterioration_time: datetime
+    time_from_session_start_minutes: int | None = None
+    deterioration_type: str
+    triggering_news2_score: int
+    description: str | None = None
+    is_locked: bool
+    locked_at: datetime | None = None
+    locked_by_user_id: int | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ClinicalDeteriorationEventResult(BaseModel):
+    event: ClinicalDeteriorationEventRead
+    event_created: bool
+    message: str
+
+
+PatientAction = Literal[
+    "stop_ultrafiltration",
+    "give_fluids",
+    "give_oxygen",
+    "position_adjustment",
+    "medication_given",
+    "doctor_called",
+    "transfer_prepared",
+    "other",
+]
+
+VascularAccessAction = Literal[
+    "check_flow",
+    "inspect_access_site",
+    "blood_culture_from_catheter",
+    "catheter_evaluation",
+    "other",
+]
+
+
+class ClinicalResponseCreate(BaseModel):
+    clinical_deterioration_event_id: int = Field(gt=0)
+    actual_response_start_time: datetime
+    patient_actions: list[PatientAction] = Field(default_factory=list)
+    vascular_access_actions: list[VascularAccessAction] = Field(default_factory=list)
+    responded_by_user_id: int | None = Field(default=None, gt=0)
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class ClinicalResponseRead(BaseModel):
+    id: int
+    clinical_deterioration_event_id: int
+    alert_id: int
+    patient_id: int
+    patient_code: str | None = None
+    dialysis_session_id: int
+    session_date: date | None = None
+    news2_total_score: int | None = None
+    deterioration_type: str | None = None
+    digital_alert_time: datetime | None = None
+    actual_response_start_time: datetime | None = None
+    response_delay_minutes: int | None = None
+    patient_actions: list[str]
+    vascular_access_actions: list[str]
+    responded_by_user_id: int | None = None
+    notes: str | None = None
+    is_locked: bool
+    locked_at: datetime | None = None
+    locked_by_user_id: int | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ClinicalResponseResult(BaseModel):
+    response: ClinicalResponseRead
+    response_created: bool
+    message: str
+
+
+class ResponseTrackingRead(BaseModel):
+    id: int
+    alert_id: int
+    patient_id: int
+    patient_code: str | None = None
+    dialysis_session_id: int
+    session_date: date | None = None
+    news2_assessment_id: int
+    news2_total_score: int | None = None
+    risk_level: str | None = None
+    clinical_deterioration_event_id: int
+    deterioration_type: str | None = None
+    deterioration_event_created_at: datetime | None = None
+    vital_signs_recorded_at: datetime | None = None
+    alert_created_at: datetime | None = None
+    alert_viewed_at: datetime | None = None
+    actual_response_start_time: datetime | None = None
+    clinical_action_at: datetime | None = None
+    alert_closed_at: datetime | None = None
+    time_to_alert_minutes: int | None = None
+    time_to_view_minutes: int | None = None
+    time_to_response_minutes: int | None = None
+    time_to_action_minutes: int | None = None
+    total_response_time_minutes: int | None = None
+    warnings: list[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+class ResponseTrackingResult(BaseModel):
+    tracking: ResponseTrackingRead
+    tracking_created: bool
+    warnings: list[str] = Field(default_factory=list)
+    message: str
+
+
+class ResponseTrackingSummary(BaseModel):
+    records_count: int
+    average_time_to_alert_minutes: float | None = None
+    average_time_to_view_minutes: float | None = None
+    average_time_to_response_minutes: float | None = None
+    average_time_to_action_minutes: float | None = None
+    average_total_response_time_minutes: float | None = None
+    fastest_response_minutes: int | None = None
+    slowest_response_minutes: int | None = None
+    alerts_without_response_count: int
+
+
+class ClinicalOutcomeCreate(BaseModel):
+    clinical_deterioration_event_id: int = Field(gt=0)
+    outcome_type: Literal[
+        "stable_completed_session",
+        "session_stopped_early",
+        "hospital_admission",
+        "emergency_department_transfer",
+        "icu_admission",
+        "death",
+    ]
+    outcome_window_hours: Literal[24, 48, 72]
+    description: str | None = Field(default=None, max_length=4000)
+    recorded_by_user_id: int | None = Field(default=None, gt=0)
+
+
+class ClinicalOutcomeRead(BaseModel):
+    id: int
+    patient_id: int
+    patient_code: str | None = None
+    dialysis_session_id: int
+    session_date: date | None = None
+    clinical_deterioration_event_id: int
+    alert_id: int | None = None
+    news2_assessment_id: int | None = None
+    news2_total_score: int | None = None
+    deterioration_type: str | None = None
+    outcome_type: str
+    outcome_recorded_at: datetime
+    outcome_window_hours: int
+    description: str | None = None
+    recorded_by_user_id: int | None = None
+    is_locked: bool
+    locked_at: datetime | None = None
+    locked_by_user_id: int | None = None
+    created_at: datetime
+
+
+class ClinicalOutcomeResult(BaseModel):
+    outcome: ClinicalOutcomeRead
+    outcome_created: bool
+    message: str
+
+
+class ClinicalOutcomeSummary(BaseModel):
+    total_outcomes: int
+    stable_completed_session_count: int = 0
+    session_stopped_early_count: int = 0
+    hospital_admission_count: int = 0
+    emergency_department_transfer_count: int = 0
+    icu_admission_count: int = 0
+    death_count: int = 0
+
+
+StudyStatus = Literal["draft", "active", "paused", "completed", "archived"]
+StudyDesign = Literal["observational", "prospective", "retrospective", "before_after", "cohort", "pilot"]
+
+
+class ResearchStudyBase(BaseModel):
+    study_code: str = Field(min_length=2, max_length=80)
+    study_title: str = Field(min_length=2, max_length=255)
+    study_description: str | None = Field(default=None, max_length=4000)
+    principal_investigator: str | None = Field(default=None, max_length=160)
+    study_design: StudyDesign
+    study_phase: str | None = Field(default=None, max_length=80)
+    study_status: StudyStatus = "draft"
+    study_group_a_name: str | None = Field(default=None, max_length=160)
+    study_group_b_name: str | None = Field(default=None, max_length=160)
+    baseline_period_start: date | None = None
+    baseline_period_end: date | None = None
+    intervention_period_start: date | None = None
+    intervention_period_end: date | None = None
+    study_start_date: date | None = None
+    study_end_date: date | None = None
+    target_sample_size: int | None = Field(default=None, ge=1)
+    inclusion_notes: str | None = Field(default=None, max_length=4000)
+    exclusion_notes: str | None = Field(default=None, max_length=4000)
+    notes: str | None = Field(default=None, max_length=4000)
+
+    @field_validator("study_code")
+    @classmethod
+    def normalize_study_code(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @field_validator("study_title", "principal_investigator", "study_phase", "study_group_a_name", "study_group_b_name")
+    @classmethod
+    def strip_optional_text(cls, value: str | None) -> str | None:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("baseline_period_end")
+    @classmethod
+    def validate_baseline_dates(cls, value: date | None, info):
+        start = info.data.get("baseline_period_start")
+        if value and start and value < start:
+            raise ValueError("baseline_period_end must be on or after baseline_period_start")
+        return value
+
+    @field_validator("intervention_period_end")
+    @classmethod
+    def validate_intervention_dates(cls, value: date | None, info):
+        start = info.data.get("intervention_period_start")
+        if value and start and value < start:
+            raise ValueError("intervention_period_end must be on or after intervention_period_start")
+        return value
+
+    @field_validator("study_end_date")
+    @classmethod
+    def validate_study_dates(cls, value: date | None, info):
+        start = info.data.get("study_start_date")
+        if value and start and value < start:
+            raise ValueError("study_end_date must be on or after study_start_date")
+        return value
+
+
+class ResearchStudyCreate(ResearchStudyBase):
+    pass
+
+
+class ResearchStudyUpdate(BaseModel):
+    study_code: str | None = Field(default=None, min_length=2, max_length=80)
+    study_title: str | None = Field(default=None, min_length=2, max_length=255)
+    study_description: str | None = Field(default=None, max_length=4000)
+    principal_investigator: str | None = Field(default=None, max_length=160)
+    study_design: StudyDesign | None = None
+    study_phase: str | None = Field(default=None, max_length=80)
+    study_status: StudyStatus | None = None
+    study_group_a_name: str | None = Field(default=None, max_length=160)
+    study_group_b_name: str | None = Field(default=None, max_length=160)
+    baseline_period_start: date | None = None
+    baseline_period_end: date | None = None
+    intervention_period_start: date | None = None
+    intervention_period_end: date | None = None
+    study_start_date: date | None = None
+    study_end_date: date | None = None
+    target_sample_size: int | None = Field(default=None, ge=1)
+    inclusion_notes: str | None = Field(default=None, max_length=4000)
+    exclusion_notes: str | None = Field(default=None, max_length=4000)
+    notes: str | None = Field(default=None, max_length=4000)
+
+    @field_validator("study_code")
+    @classmethod
+    def normalize_update_study_code(cls, value: str | None) -> str | None:
+        return value.strip().upper() if isinstance(value, str) else value
+
+
+class ResearchStudyRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    study_code: str | None = None
+    study_title: str | None = None
+    study_description: str | None = None
+    principal_investigator: str | None = None
+    study_design: str | None = None
+    study_phase: str | None = None
+    study_status: str
+    study_group_a_name: str | None = None
+    study_group_b_name: str | None = None
+    baseline_period_start: date | None = None
+    baseline_period_end: date | None = None
+    intervention_period_start: date | None = None
+    intervention_period_end: date | None = None
+    study_start_date: date | None = None
+    study_end_date: date | None = None
+    target_sample_size: int | None = None
+    inclusion_notes: str | None = None
+    exclusion_notes: str | None = None
+    notes: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class StudyReadinessReport(BaseModel):
+    study_id: int
+    readiness_score: int
+    missing_requirements: list[str]
+    warnings: list[str]
+    recommendations: list[str]
+    checks: dict[str, bool]
+    check_labels: dict[str, str] = Field(default_factory=dict)
+    dashboard: dict[str, object]
+    protocol: dict[str, object] = Field(default_factory=dict)
+    timeline: dict[str, object] = Field(default_factory=dict)

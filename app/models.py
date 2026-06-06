@@ -24,6 +24,23 @@ class StudyGroup(StrEnum):
     intervention = "intervention"
 
 
+class ResearchStudyStatus(StrEnum):
+    draft = "draft"
+    active = "active"
+    paused = "paused"
+    completed = "completed"
+    archived = "archived"
+
+
+class ResearchStudyDesign(StrEnum):
+    observational = "observational"
+    prospective = "prospective"
+    retrospective = "retrospective"
+    before_after = "before_after"
+    cohort = "cohort"
+    pilot = "pilot"
+
+
 class AccessType(StrEnum):
     av_fistula = "av_fistula"
     av_graft = "av_graft"
@@ -340,13 +357,30 @@ class ResearchStudy(Base, TimestampMixin):
     __tablename__ = "research_studies"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text)
+    study_code: Mapped[str | None] = mapped_column(String(80), unique=True, index=True)
+    study_title: Mapped[str | None] = mapped_column(String(255))
+    study_description: Mapped[str | None] = mapped_column(Text)
     principal_investigator: Mapped[str | None] = mapped_column(String(160))
-    study_design: Mapped[str | None] = mapped_column(String(160))
+    study_design: Mapped[str | None] = mapped_column(String(80))
+    study_phase: Mapped[str | None] = mapped_column(String(80))
+    study_status: Mapped[str] = mapped_column(String(40), default=ResearchStudyStatus.draft, nullable=False)
+    study_group_a_name: Mapped[str | None] = mapped_column(String(160))
+    study_group_b_name: Mapped[str | None] = mapped_column(String(160))
+    baseline_period_start: Mapped[date | None] = mapped_column(Date)
+    baseline_period_end: Mapped[date | None] = mapped_column(Date)
+    intervention_period_start: Mapped[date | None] = mapped_column(Date)
+    intervention_period_end: Mapped[date | None] = mapped_column(Date)
+    study_start_date: Mapped[date | None] = mapped_column(Date)
+    study_end_date: Mapped[date | None] = mapped_column(Date)
+    target_sample_size: Mapped[int | None] = mapped_column(Integer)
+    inclusion_notes: Mapped[str | None] = mapped_column(Text)
+    exclusion_notes: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[str | None] = mapped_column(Text)
+    title: Mapped[str | None] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(Text)
     start_date: Mapped[date | None] = mapped_column(Date)
     end_date: Mapped[date | None] = mapped_column(Date)
-    status: Mapped[str] = mapped_column(String(40), default="draft", nullable=False)
+    status: Mapped[str | None] = mapped_column(String(40), default=ResearchStudyStatus.draft)
 
 
 class AuditLog(Base):

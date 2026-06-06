@@ -22,13 +22,14 @@ from app.models import (
     PatientVascularAccess,
     ResearchStudy,
     ResponseTracking,
-    RiskLevel,
     StudyGroup,
     StudyPhase,
     SystemSetting,
     User,
     UserRole,
 )
+from app.schemas import NEWS2CalculationRequest
+from app.services.news2_service import calculate_news2
 
 
 def _json(value: list[str]) -> str:
@@ -186,39 +187,67 @@ def seed_database(db: Session) -> dict[str, int | str]:
     db.add_all(measurements)
     db.flush()
 
+    stable_news2 = calculate_news2(
+        NEWS2CalculationRequest(
+            respiratory_rate=measurements[0].respiratory_rate,
+            spo2=measurements[0].spo2,
+            oxygen_therapy=measurements[0].oxygen_therapy,
+            systolic_bp=measurements[0].systolic_bp,
+            pulse_rate=measurements[0].pulse_rate,
+            temperature=measurements[0].temperature,
+            consciousness_level=measurements[0].consciousness_level,
+        )
+    )
+    deteriorating_consciousness = (
+        "new_confusion"
+        if measurements[1].confusion_status == "new_confusion"
+        else measurements[1].consciousness_level
+    )
+    deteriorating_news2 = calculate_news2(
+        NEWS2CalculationRequest(
+            respiratory_rate=measurements[1].respiratory_rate,
+            spo2=measurements[1].spo2,
+            oxygen_therapy=measurements[1].oxygen_therapy,
+            systolic_bp=measurements[1].systolic_bp,
+            pulse_rate=measurements[1].pulse_rate,
+            temperature=measurements[1].temperature,
+            consciousness_level=deteriorating_consciousness,
+        )
+    )
+
     assessments = [
         News2Assessment(
             patient_id=patients[0].id,
             dialysis_session_id=sessions[0].id,
             intradialytic_measurement_id=measurements[0].id,
-            respiratory_score=0,
-            spo2_score=0,
-            oxygen_score=0,
-            systolic_bp_score=0,
-            pulse_score=0,
-            temperature_score=0,
-            consciousness_score=0,
-            total_score=0,
-            risk_level=RiskLevel.low,
-            alert_required=False,
-            trigger_reason="Routine stable observation",
+            respiratory_score=stable_news2.respiratory_score,
+            spo2_score=stable_news2.spo2_score,
+            oxygen_score=stable_news2.oxygen_score,
+            systolic_bp_score=stable_news2.systolic_bp_score,
+            pulse_score=stable_news2.pulse_score,
+            temperature_score=stable_news2.temperature_score,
+            consciousness_score=stable_news2.consciousness_score,
+            total_score=stable_news2.total_score,
+            risk_level=stable_news2.risk_level,
+            alert_required=stable_news2.alert_required,
+            trigger_reason=stable_news2.trigger_reason,
             created_by_user_id=users[2].id,
         ),
         News2Assessment(
             patient_id=patients[1].id,
             dialysis_session_id=sessions[1].id,
             intradialytic_measurement_id=measurements[1].id,
-            respiratory_score=2,
-            spo2_score=3,
-            oxygen_score=2,
-            systolic_bp_score=3,
-            pulse_score=2,
-            temperature_score=1,
-            consciousness_score=3,
-            total_score=16,
-            risk_level=RiskLevel.critical,
-            alert_required=True,
-            trigger_reason="NEWS2 critical score with hypotension and reduced oxygen saturation",
+            respiratory_score=deteriorating_news2.respiratory_score,
+            spo2_score=deteriorating_news2.spo2_score,
+            oxygen_score=deteriorating_news2.oxygen_score,
+            systolic_bp_score=deteriorating_news2.systolic_bp_score,
+            pulse_score=deteriorating_news2.pulse_score,
+            temperature_score=deteriorating_news2.temperature_score,
+            consciousness_score=deteriorating_news2.consciousness_score,
+            total_score=deteriorating_news2.total_score,
+            risk_level=deteriorating_news2.risk_level,
+            alert_required=deteriorating_news2.alert_required,
+            trigger_reason=deteriorating_news2.trigger_reason,
             created_by_user_id=users[2].id,
         ),
     ]
@@ -229,12 +258,13 @@ def seed_database(db: Session) -> dict[str, int | str]:
         patient_id=patients[1].id,
         dialysis_session_id=sessions[1].id,
         news2_assessment_id=assessments[1].id,
-        risk_level=RiskLevel.critical,
-        severity_level=RiskLevel.critical,
+        risk_level=assessments[1].risk_level,
+        severity_level=assessments[1].risk_level,
         status=AlertStatus.acknowledged,
         priority="immediate",
         trigger_reason=assessments[1].trigger_reason,
         assigned_to_user_id=users[1].id,
+        created_at=measurements[1].measurement_time,
         viewed_at=measurements[1].measurement_time + timedelta(minutes=2),
         acknowledged_at=measurements[1].measurement_time + timedelta(minutes=5),
         action_taken_at=measurements[1].measurement_time + timedelta(minutes=9),
@@ -250,7 +280,7 @@ def seed_database(db: Session) -> dict[str, int | str]:
         deterioration_time=measurements[1].measurement_time,
         time_from_session_start_minutes=75,
         deterioration_type=DeteriorationType.acute_hypotension,
-        triggering_news2_score=16,
+        triggering_news2_score=assessments[1].total_score,
         description="Acute intradialytic hypotension with oxygen desaturation and new confusion.",
     )
     db.add(event)
@@ -259,7 +289,7 @@ def seed_database(db: Session) -> dict[str, int | str]:
     response = ClinicalResponse(
         clinical_deterioration_event_id=event.id,
         alert_id=alert.id,
-        digital_alert_time=measurements[1].measurement_time,
+        digital_alert_time=alert.created_at,
         actual_response_start_time=measurements[1].measurement_time + timedelta(minutes=9),
         response_delay_minutes=9,
         patient_actions=_json(["reposition_patient", "administer_oxygen", "reduce_ultrafiltration"]),
@@ -286,19 +316,44 @@ def seed_database(db: Session) -> dict[str, int | str]:
         alert_created_at=measurements[1].measurement_time,
         alert_viewed_at=measurements[1].measurement_time + timedelta(minutes=2),
         actual_response_start_time=measurements[1].measurement_time + timedelta(minutes=9),
-        clinical_action_at=measurements[1].measurement_time + timedelta(minutes=12),
+        clinical_action_at=measurements[1].measurement_time + timedelta(minutes=9),
         time_to_alert_minutes=0,
         time_to_view_minutes=2,
         time_to_response_minutes=9,
-        time_to_action_minutes=12,
-        total_response_time_minutes=12,
+        time_to_action_minutes=9,
+        total_response_time_minutes=9,
     )
     db.add_all([response, outcome, tracking])
 
     db.add_all(
         [
             ClinicalNote(patient_id=patients[1].id, dialysis_session_id=sessions[1].id, news2_assessment_id=assessments[1].id, alert_id=alert.id, user_id=users[2].id, note_type="nursing", content="Repeat vital signs confirmed deterioration; physician notified."),
-            ResearchStudy(title="NEWS2 in Hemodialysis Clinical Deterioration Monitoring", description="PhD MVP study dataset for pre/post implementation monitoring.", principal_investigator="Principal Investigator", study_design="Prospective pre/post implementation study", start_date=date(2026, 1, 1), status="active"),
+            ResearchStudy(
+                study_code="NEWS2-HD-001",
+                study_title="NEWS2 in Hemodialysis Clinical Deterioration Monitoring",
+                study_description="PhD MVP study dataset for pre/post implementation monitoring.",
+                principal_investigator="Principal Investigator",
+                study_design="before_after",
+                study_phase="implementation",
+                study_status="active",
+                study_group_a_name="Control",
+                study_group_b_name="Intervention",
+                baseline_period_start=date(2026, 1, 1),
+                baseline_period_end=date(2026, 3, 31),
+                intervention_period_start=date(2026, 4, 1),
+                intervention_period_end=date(2026, 12, 31),
+                study_start_date=date(2026, 1, 1),
+                study_end_date=date(2026, 12, 31),
+                target_sample_size=120,
+                inclusion_notes="Adult hemodialysis sessions with intradialytic vital signs.",
+                exclusion_notes="Incomplete anonymized identifiers or non-hemodialysis encounters.",
+                notes="Governance seed record for Phase 13 readiness monitoring.",
+                title="NEWS2 in Hemodialysis Clinical Deterioration Monitoring",
+                description="PhD MVP study dataset for pre/post implementation monitoring.",
+                start_date=date(2026, 1, 1),
+                end_date=date(2026, 12, 31),
+                status="active",
+            ),
             AuditLog(user_id=users[0].id, action="seed_database", entity_type="system", entity_id="seed_v1", new_value="Initial fake clinical research seed data", ip_address="127.0.0.1", user_agent="python -m app.seed"),
             SystemSetting(setting_key="seed_version", setting_value="phase02_v1"),
             SystemSetting(setting_key="default_language", setting_value="ar"),
