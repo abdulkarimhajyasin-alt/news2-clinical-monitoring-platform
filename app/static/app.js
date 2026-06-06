@@ -49,6 +49,145 @@ routes.splice(
   { id: "study-readiness", label: "جاهزية الدراسة", group: "البحث", icon: "SR", type: "study" }
 );
 
+const NAV_GROUPS = [
+  { label: "لوحة التحكم", icon: "D", route: "dashboard" },
+  {
+    label: "المرضى",
+    icon: "P",
+    children: [
+      { route: "patients" },
+      { route: "create-patient", permission: "patients:create" },
+      { route: "patient-profile" },
+      { route: "patient-baseline" },
+      { route: "vascular-access" }
+    ]
+  },
+  {
+    label: "الجلسات",
+    icon: "S",
+    children: [
+      { route: "sessions" },
+      { route: "create-session" },
+      { route: "session-details" },
+      { route: "intradialytic-monitoring" }
+    ]
+  },
+  {
+    label: "التقييم",
+    icon: "VS",
+    children: [
+      { route: "vital-signs-entry", permission: "measurements:create" },
+      { route: "news2-assessment" },
+      { route: "news2-trend" },
+      { route: "news2-history" }
+    ]
+  },
+  {
+    label: "التنبيهات",
+    icon: "A",
+    children: [
+      { route: "active-alerts" },
+      { route: "alert-details" },
+      { route: "alert-timeline" }
+    ]
+  },
+  {
+    label: "الأحداث والاستجابة",
+    icon: "E",
+    children: [
+      { route: "deterioration-events" },
+      { route: "event-details" },
+      { route: "event-timeline" },
+      { route: "medical-response-log" },
+      { route: "nursing-response-log" },
+      { route: "response-workflow" },
+      { route: "response-time-dashboard" },
+      { route: "response-analytics" }
+    ]
+  },
+  {
+    label: "المآلات",
+    icon: "CO",
+    children: [
+      { route: "clinical-outcomes" },
+      { route: "outcome-tracking" },
+      { route: "outcome-analytics" }
+    ]
+  },
+  {
+    label: "البحث",
+    icon: "R",
+    children: [
+      { route: "research-dashboard" },
+      { route: "pre-post-comparison" },
+      { route: "study-metrics", permission: "research:analytics" },
+      { route: "dataset-statistics", permission: "research:view" },
+      { route: "export-center", permission: "research:view" },
+      { route: "study-management", permission: "studies:view" },
+      { route: "research-protocol", permission: "studies:view" },
+      { route: "study-timeline", permission: "studies:view" },
+      { route: "study-readiness", permission: "studies:view" }
+    ]
+  },
+  {
+    label: "الإدارة",
+    icon: "U",
+    children: [
+      { route: "users", permission: "users:view" },
+      { route: "roles" },
+      { route: "permissions" },
+      { route: "audit-logs", permission: "audit:view" },
+      { route: "system-settings", permission: "settings:view" },
+      { route: "language-settings" }
+    ]
+  }
+];
+
+const NAV_ROUTE_LABELS = {
+  patients: "قائمة المرضى",
+  "create-patient": "إضافة مريض",
+  "patient-profile": "ملف المريض",
+  "patient-baseline": "الخط الأساسي",
+  "vascular-access": "الوصول الوعائي",
+  sessions: "جلسات الغسيل",
+  "create-session": "إنشاء جلسة",
+  "session-details": "تفاصيل الجلسة",
+  "intradialytic-monitoring": "الرصد أثناء الجلسة",
+  "vital-signs-entry": "إدخال العلامات الحيوية",
+  "news2-assessment": "تقييم NEWS2",
+  "news2-trend": "اتجاه NEWS2",
+  "news2-history": "سجل NEWS2",
+  "active-alerts": "التنبيهات النشطة",
+  "alert-details": "تفاصيل التنبيه",
+  "alert-timeline": "تسلسل التنبيه",
+  "deterioration-events": "أحداث التدهور",
+  "event-details": "تفاصيل الحدث",
+  "event-timeline": "تسلسل الحدث",
+  "medical-response-log": "سجل الاستجابة الطبية",
+  "nursing-response-log": "سجل الاستجابة التمريضية",
+  "response-workflow": "مسار الاستجابة",
+  "response-time-dashboard": "زمن الاستجابة",
+  "response-analytics": "تحليلات الاستجابة",
+  "clinical-outcomes": "المآلات السريرية",
+  "outcome-tracking": "تتبع المآلات",
+  "outcome-analytics": "تحليلات المآلات",
+  "research-dashboard": "لوحة البحث",
+  "pre-post-comparison": "مقارنة قبل وبعد",
+  "study-metrics": "مؤشرات الدراسة",
+  "dataset-statistics": "إحصاءات البيانات",
+  "export-center": "مركز التصدير",
+  "study-management": "إدارة الدراسة",
+  "research-protocol": "بروتوكول البحث",
+  "study-timeline": "الخط الزمني للدراسة",
+  "study-readiness": "جاهزية الدراسة",
+  users: "المستخدمون",
+  roles: "الأدوار",
+  permissions: "الصلاحيات",
+  "audit-logs": "سجلات التدقيق",
+  "system-settings": "إعدادات النظام",
+  "language-settings": "إعدادات اللغة"
+};
+
 const appState = {
   health: null,
   patients: [],
@@ -68,6 +207,7 @@ const appState = {
   clinicalOutcomes: [],
   outcomeSummary: null,
   outcomeSubmission: null,
+  patientSubmission: null,
   researchDatasetRows: [],
   researchDatasetQuality: null,
   researchExportFilters: {},
@@ -81,6 +221,8 @@ const appState = {
   currentRoleLabel: "مدير النظام",
   permissions: [],
   permissionMatrix: null,
+  navCollapsed: localStorage.getItem("news2NavCollapsed") === "true",
+  expandedNavGroups: new Set(JSON.parse(localStorage.getItem("news2ExpandedNavGroups") || "[]")),
   loading: {},
   errors: {}
 };
@@ -115,6 +257,13 @@ const api = {
   },
   getPatients() {
     return this.request("/api/patients").then((rows) => rows.map(normalizePatient));
+  },
+  createPatient(payload) {
+    return this.request("/api/patients", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
   },
   getDialysisSessions() {
     return this.request("/api/dialysis-sessions").then((rows) => rows.map(normalizeSession));
@@ -702,12 +851,63 @@ function hasPermission(permission) {
   return (appState.permissions || []).includes(permission);
 }
 
+function routeById(routeId) {
+  return routes.find((item) => item.id === routeId);
+}
+
+function navItemVisible(item) {
+  if (!item.permission) return true;
+  return hasPermission(item.permission);
+}
+
+function visibleNavGroups() {
+  return NAV_GROUPS.map((group) => {
+    const children = (group.children || []).filter(navItemVisible).map((child) => ({ ...child, routeMeta: routeById(child.route) })).filter((child) => child.routeMeta);
+    return { ...group, children, routeMeta: group.route ? routeById(group.route) : null };
+  }).filter((group) => {
+    if (group.route) return navItemVisible(group) && group.routeMeta;
+    return group.children.length > 0;
+  });
+}
+
+function activeNavGroup(routeId) {
+  return NAV_GROUPS.find((group) => group.route === routeId || (group.children || []).some((child) => child.route === routeId));
+}
+
+function groupExpanded(group, routeId) {
+  if (appState.navCollapsed) return false;
+  if (group.route === routeId || (group.children || []).some((child) => child.route === routeId)) return true;
+  return appState.expandedNavGroups.has(group.label);
+}
+
+function toggleNavGroup(label) {
+  if (appState.expandedNavGroups.has(label)) appState.expandedNavGroups.delete(label);
+  else appState.expandedNavGroups.add(label);
+  localStorage.setItem("news2ExpandedNavGroups", JSON.stringify([...appState.expandedNavGroups]));
+  render();
+}
+
+function toggleSidebar() {
+  if (window.matchMedia("(max-width: 1120px)").matches) {
+    document.body.classList.toggle("nav-open");
+    return;
+  }
+  appState.navCollapsed = !appState.navCollapsed;
+  localStorage.setItem("news2NavCollapsed", String(appState.navCollapsed));
+  render();
+}
+
+function closeMobileNav() {
+  document.body.classList.remove("nav-open");
+}
+
 function currentRoute() {
   return location.hash.replace("#/", "") || "login";
 }
 
 function setRoute(routeId) {
   location.hash = `/${routeId}`;
+  closeMobileNav();
 }
 
 function escapeHtml(value) {
@@ -817,6 +1017,46 @@ async function loadStudyCenter() {
   return { loaded: true, studiesCount: studies.length, selectedStudyId: appState.selectedStudyId };
 }
 
+function patientErrorMessage(message) {
+  if (String(message || "").includes("patient_code already exists")) return "رقم الملف مستخدم مسبقا";
+  if (String(message || "").includes("Permission denied")) return "ليست لديك صلاحية إضافة مريض";
+  return message || "تعذر حفظ المريض";
+}
+
+function patientPayloadFromForm(form) {
+  const data = new FormData(form);
+  const ageValue = data.get("age") || ageFromBirthDate(data.get("birth_date"));
+  return compactObject({
+    patient_code: data.get("patient_code"),
+    full_name: data.get("full_name"),
+    age: ageValue !== "" && ageValue !== null ? Number(ageValue) : null,
+    gender: data.get("gender"),
+    target_dry_weight: data.get("target_dry_weight") ? Number(data.get("target_dry_weight")) : null,
+    dialysis_start_date: data.get("dialysis_start_date") || null,
+    weekly_sessions_count: data.get("weekly_sessions_count") ? Number(data.get("weekly_sessions_count")) : 3,
+    comorbidities: data.get("comorbidities") || null,
+    baseline_functional_status: data.get("baseline_functional_status") || null,
+    study_phase: data.get("study_phase") || "post_implementation",
+    study_group: data.get("study_group") || "intervention",
+    is_anonymized: true
+  });
+}
+
+function ageFromBirthDate(value) {
+  if (!value) return "";
+  const birthDate = new Date(value);
+  if (Number.isNaN(birthDate.getTime())) return "";
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDelta = today.getMonth() - birthDate.getMonth();
+  if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < birthDate.getDate())) age -= 1;
+  return age >= 0 ? age : "";
+}
+
+function compactObject(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== "" && item !== null && item !== undefined));
+}
+
 function ensureDataForRoute(route) {
   if (route.id === "dashboard") {
     if (!appState.researchSummary && !appState.loading.researchSummary) loadResource("researchSummary", api.getResearchSummary.bind(api));
@@ -878,6 +1118,72 @@ function renderLogin() {
 }
 
 function renderShell(route) {
+  const navGroups = visibleNavGroups();
+  const activeGroup = activeNavGroup(route.id);
+  if (activeGroup && !appState.expandedNavGroups.has(activeGroup.label)) {
+    appState.expandedNavGroups.add(activeGroup.label);
+    localStorage.setItem("news2ExpandedNavGroups", JSON.stringify([...appState.expandedNavGroups]));
+  }
+  document.body.classList.toggle("nav-collapsed", appState.navCollapsed);
+  app.innerHTML = `
+    <div class="shell" id="app-shell">
+      <div class="nav-scrim" onclick="closeMobileNav()" aria-hidden="true"></div>
+      <aside class="sidebar" id="app-sidebar" aria-label="القائمة الرئيسية">
+        <div class="brand">
+          <h2 class="brand-title"><span class="brand-mark">N2</span><span class="brand-text">منصة NEWS2</span></h2>
+          <p class="brand-subtitle">Karamix Labs Clinical Research</p>
+          <button class="icon-btn sidebar-close" aria-label="إغلاق القائمة" onclick="closeMobileNav()">×</button>
+        </div>
+        <nav class="nav-list" aria-label="التنقل الرئيسي">
+          ${navGroups.map((group) => renderNavGroup(group, route.id)).join("")}
+        </nav>
+      </aside>
+      <main class="main">
+        <header class="topbar">
+          <button class="icon-btn menu-toggle" aria-label="فتح أو طي القائمة الجانبية" aria-controls="app-sidebar" aria-expanded="${!appState.navCollapsed}" onclick="toggleSidebar()">☰</button>
+          <div>
+            <h1>${route.label}</h1>
+            <p>${subtitles[route.id] || subtitles.default}</p>
+          </div>
+          <div class="top-actions">
+            ${healthBadge()}
+            ${renderDevRoleSwitcher()}
+            ${badge("RTL", "info")}
+            <button class="icon-btn" aria-label="عرض التنبيهات" title="التنبيهات" onclick="setRoute('active-alerts')">!</button>
+            <button class="btn" onclick="setRoute('login')">خروج</button>
+          </div>
+        </header>
+        <section class="content">${renderScreen(route)}</section>
+      </main>
+    </div>`;
+}
+
+function renderNavGroup(group, routeId) {
+  const isDirect = Boolean(group.route);
+  const active = group.route === routeId || (group.children || []).some((child) => child.route === routeId);
+  if (isDirect) {
+    const meta = group.routeMeta || routeById(group.route);
+    return `<button class="nav-link nav-parent ${active ? "active" : ""}" title="${escapeHtml(group.label)}" onclick="setRoute('${group.route}')"><span class="nav-icon">${escapeHtml(group.icon)}</span><span class="nav-label">${escapeHtml(group.label)}</span></button>`;
+  }
+  const expanded = groupExpanded(group, routeId);
+  return `<div class="nav-section ${active ? "active" : ""} ${expanded ? "expanded" : ""}">
+    <button class="nav-link nav-parent ${active ? "active" : ""}" aria-expanded="${expanded}" title="${escapeHtml(group.label)}" onclick="toggleNavGroup('${escapeHtml(group.label)}')">
+      <span class="nav-icon">${escapeHtml(group.icon)}</span><span class="nav-label">${escapeHtml(group.label)}</span><span class="nav-caret">▾</span>
+    </button>
+    <div class="nav-children">
+      ${(group.children || []).map((child) => renderNavChild(child, routeId)).join("")}
+    </div>
+  </div>`;
+}
+
+function renderNavChild(child, routeId) {
+  const meta = child.routeMeta || routeById(child.route);
+  if (!meta) return "";
+  const labelText = child.label || NAV_ROUTE_LABELS[child.route] || meta.label;
+  return `<button class="nav-link nav-child ${child.route === routeId ? "active" : ""}" onclick="setRoute('${child.route}')"><span class="nav-icon">${escapeHtml(meta.icon)}</span><span class="nav-label">${escapeHtml(labelText)}</span></button>`;
+}
+
+function renderShellLegacy(route) {
   const groups = routes.reduce((acc, item) => {
     acc[item.group] = acc[item.group] || [];
     acc[item.group].push(item);
@@ -1239,8 +1545,34 @@ function formatCell(cell) {
 
 function renderFormScreen(route) {
   if (route.entity === "vitals") return renderVitalSignsEntry();
+  if (route.entity === "patient") return renderPatientCreateForm(route);
   const fields = formFields[route.entity] || formFields.patient;
   return card(route.label, `<div class="form-grid">${fields.map((field, index) => `<div class="field ${index === fields.length - 1 ? "full" : ""}"><label>${field}</label>${index === fields.length - 1 ? `<textarea placeholder="${field}"></textarea>` : `<input placeholder="${field}">`}</div>`).join("")}</div><div class="footer-actions"><button class="btn primary">حفظ</button><button class="btn">حفظ كمسودة</button><button class="btn">إلغاء</button></div>`);
+}
+
+function renderPatientCreateForm(route) {
+  const canCreate = hasPermission("patients:create");
+  return card(route.label, `
+    ${appState.patientSubmission ? `<div class="state-message empty"><strong>تم حفظ المريض بنجاح</strong><span>${escapeHtml(appState.patientSubmission.patient?.patient_code || "")}</span></div>` : ""}
+    ${appState.errors.patientSubmission ? `<div class="state-message error" role="alert"><strong>تعذر حفظ المريض</strong><span>${escapeHtml(patientErrorMessage(appState.errors.patientSubmission))}</span></div>` : ""}
+    ${canCreate ? "" : `<div class="state-message warning"><strong>ليست لديك صلاحية إضافة مريض</strong><span>استخدم دور الطبيب أو المدير في الوضع التجريبي.</span></div>`}
+    <form class="form-grid" onsubmit="submitPatientCreate(event)">
+      <div class="field"><label>الاسم الكامل</label><input name="full_name" required placeholder="الاسم الكامل"></div>
+      <div class="field"><label>رقم الملف</label><input name="patient_code" required placeholder="ANON-P-1004"></div>
+      <div class="field"><label>العمر</label><input name="age" type="number" min="0" max="130" required placeholder="58"></div>
+      <div class="field"><label>تاريخ الميلاد</label><input name="birth_date" type="date"></div>
+      <div class="field"><label>الجنس</label><select name="gender" required><option value="">اختر</option><option value="female">أنثى</option><option value="male">ذكر</option></select></div>
+      <div class="field"><label>نوع الوصول الوعائي</label><input name="vascular_access_type" placeholder="لا يحفظ ضمن جدول المرضى حاليا"></div>
+      <div class="field full"><label>الأمراض المصاحبة</label><textarea name="comorbidities" placeholder="الأمراض المصاحبة"></textarea></div>
+      <div class="field"><label>عدد جلسات الغسيل أسبوعيا</label><input name="weekly_sessions_count" type="number" min="1" max="14" value="3"></div>
+      <div class="field"><label>وزن الجفاف المستهدف</label><input name="target_dry_weight" type="number" min="1" max="500" step="0.1"></div>
+      <div class="field"><label>تاريخ بداية الغسيل</label><input name="dialysis_start_date" type="date"></div>
+      <div class="field"><label>مرحلة الدراسة</label><select name="study_phase"><option value="post_implementation">بعد التطبيق</option><option value="pre_implementation">قبل التطبيق</option></select></div>
+      <div class="field"><label>مجموعة الدراسة</label><select name="study_group"><option value="intervention">تدخل</option><option value="control">ضابطة</option></select></div>
+      <div class="field full"><label>ملاحظات سريرية</label><textarea name="baseline_functional_status" placeholder="ملاحظات سريرية"></textarea></div>
+      <div class="footer-actions full"><button class="btn primary" type="submit" ${appState.loading.patientSubmission || !canCreate ? "disabled" : ""}>${appState.loading.patientSubmission ? "جاري الحفظ..." : "حفظ"}</button><button class="btn" type="button" onclick="setRoute('patients')">إلغاء</button></div>
+    </form>
+  `);
 }
 
 function renderVitalSignsEntry() {
@@ -1460,6 +1792,26 @@ async function submitMonitoringMeasurement(event) {
     appState.errors.monitoringSubmission = error.message || "تعذر حفظ القياس";
   } finally {
     appState.loading.monitoringSubmission = false;
+    render();
+  }
+}
+
+async function submitPatientCreate(event) {
+  event.preventDefault();
+  appState.loading.patientSubmission = true;
+  appState.errors.patientSubmission = null;
+  appState.patientSubmission = null;
+  render();
+  try {
+    const payload = patientPayloadFromForm(event.currentTarget);
+    appState.patientSubmission = await api.createPatient(payload);
+    appState.patients = await api.getPatients();
+    appState.researchSummary = await api.getResearchSummary();
+    setRoute("patients");
+  } catch (error) {
+    appState.errors.patientSubmission = error.message || "تعذر حفظ المريض";
+  } finally {
+    appState.loading.patientSubmission = false;
     render();
   }
 }
@@ -2340,7 +2692,7 @@ function renderStudyForm(study) {
 }
 
 function render() {
-  document.body.classList.remove("nav-open");
+  document.body.classList.toggle("nav-collapsed", appState.navCollapsed);
   const id = currentRoute();
   if (id === "login") {
     renderLogin();
@@ -2353,6 +2705,7 @@ function render() {
 
 window.setRoute = setRoute;
 window.calculateNews2Demo = calculateNews2Demo;
+window.submitPatientCreate = submitPatientCreate;
 window.submitMonitoringMeasurement = submitMonitoringMeasurement;
 window.submitDeteriorationEvent = submitDeteriorationEvent;
 window.submitClinicalResponse = submitClinicalResponse;
@@ -2361,7 +2714,16 @@ window.clearResearchExportFilters = clearResearchExportFilters;
 window.downloadResearchExport = downloadResearchExport;
 window.submitStudyForm = submitStudyForm;
 window.changeDevRole = changeDevRole;
+window.toggleSidebar = toggleSidebar;
+window.toggleNavGroup = toggleNavGroup;
+window.closeMobileNav = closeMobileNav;
 window.addEventListener("hashchange", render);
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeMobileNav();
+});
+window.addEventListener("resize", () => {
+  if (!window.matchMedia("(max-width: 1120px)").matches) closeMobileNav();
+});
 loadHealth();
 loadRbacContext();
 render();

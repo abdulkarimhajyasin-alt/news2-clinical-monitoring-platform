@@ -13,6 +13,7 @@
   --shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
   --radius: 8px;
   --sidebar: 292px;
+  --sidebar-collapsed: 76px;
 }
 
 * {
@@ -26,6 +27,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
+  overflow-x: hidden;
   background: var(--background);
   color: var(--text);
   font-family: Tahoma, Arial, sans-serif;
@@ -108,6 +110,11 @@ button:disabled {
   min-height: 100vh;
   display: grid;
   grid-template-columns: var(--sidebar) 1fr;
+  transition: grid-template-columns 0.22s ease;
+}
+
+body.nav-collapsed .shell {
+  grid-template-columns: var(--sidebar-collapsed) 1fr;
 }
 
 .sidebar {
@@ -118,9 +125,11 @@ button:disabled {
   background: #0b2545;
   color: #dbeafe;
   border-left: 1px solid rgba(255, 255, 255, 0.08);
+  transition: width 0.22s ease, transform 0.22s ease;
 }
 
 .brand {
+  position: relative;
   padding: 22px 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -151,15 +160,19 @@ button:disabled {
   font-size: 12px;
 }
 
-.nav-group {
-  padding: 14px 12px;
+.sidebar-close {
+  display: none;
+  position: absolute;
+  top: 16px;
+  left: 16px;
 }
 
-.nav-group-title {
-  margin: 12px 10px 8px;
-  color: #93c5fd;
-  font-size: 12px;
-  font-weight: 700;
+.nav-list {
+  padding: 10px 10px 16px;
+}
+
+.nav-section {
+  margin-bottom: 4px;
 }
 
 .nav-link {
@@ -167,7 +180,8 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  min-height: 38px;
+  padding: 8px 10px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -181,6 +195,37 @@ button:disabled {
   color: #fff;
 }
 
+.nav-parent {
+  font-weight: 700;
+}
+
+.nav-child {
+  min-height: 34px;
+  margin-top: 3px;
+  padding-right: 42px;
+  color: #bfdbfe;
+  font-size: 13px;
+}
+
+.nav-children {
+  display: none;
+  padding: 2px 0 6px;
+}
+
+.nav-section.expanded .nav-children {
+  display: block;
+}
+
+.nav-caret {
+  margin-inline-start: auto;
+  color: #93c5fd;
+  transition: transform 0.18s ease;
+}
+
+.nav-section.expanded .nav-caret {
+  transform: rotate(180deg);
+}
+
 .nav-icon {
   width: 26px;
   height: 26px;
@@ -191,6 +236,46 @@ button:disabled {
   background: rgba(255, 255, 255, 0.08);
   color: #bfdbfe;
   font-size: 13px;
+}
+
+.nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.nav-collapsed .sidebar {
+  width: var(--sidebar-collapsed);
+}
+
+body.nav-collapsed .brand {
+  padding-inline: 14px;
+}
+
+body.nav-collapsed .brand-text,
+body.nav-collapsed .brand-subtitle,
+body.nav-collapsed .nav-label,
+body.nav-collapsed .nav-caret,
+body.nav-collapsed .nav-children {
+  display: none;
+}
+
+body.nav-collapsed .nav-list {
+  padding-inline: 8px;
+}
+
+body.nav-collapsed .nav-link {
+  justify-content: center;
+  padding-inline: 8px;
+}
+
+body.nav-collapsed .nav-icon {
+  margin: 0;
+}
+
+.nav-scrim {
+  display: none;
 }
 
 .main {
@@ -748,8 +833,9 @@ textarea:focus {
   margin-top: 18px;
 }
 
-.mobile-toggle {
-  display: none;
+.mobile-toggle,
+.menu-toggle {
+  display: inline-grid;
 }
 
 @keyframes shimmer {
@@ -844,6 +930,7 @@ textarea:focus {
 }
 
 @media (max-width: 1120px) {
+  body.nav-collapsed .shell,
   .shell,
   .auth-page,
   .dashboard-hero,
@@ -853,10 +940,10 @@ textarea:focus {
 
   .sidebar {
     position: fixed;
-    inset: 0 auto 0 0;
+    inset: 0 0 0 auto;
     z-index: 20;
     width: min(86vw, var(--sidebar));
-    transform: translateX(-105%);
+    transform: translateX(105%);
     transition: transform 0.22s ease;
   }
 
@@ -864,8 +951,43 @@ textarea:focus {
     transform: translateX(0);
   }
 
-  .mobile-toggle {
+  body.nav-collapsed .sidebar {
+    width: min(86vw, var(--sidebar));
+  }
+
+  body.nav-collapsed .brand-text,
+  body.nav-collapsed .brand-subtitle,
+  body.nav-collapsed .nav-label,
+  body.nav-collapsed .nav-caret {
+    display: inline;
+  }
+
+  body.nav-collapsed .nav-link {
+    justify-content: flex-start;
+  }
+
+  body.nav-collapsed .nav-children {
+    display: none;
+  }
+
+  body.nav-collapsed .nav-section.expanded .nav-children {
+    display: block;
+  }
+
+  .sidebar-close {
     display: inline-grid;
+  }
+
+  .nav-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 19;
+    display: none;
+    background: rgba(15, 23, 42, 0.45);
+  }
+
+  body.nav-open .nav-scrim {
+    display: block;
   }
 
   .auth-panel {

@@ -2,6 +2,8 @@
 
 The system starts with patient baseline data, including dialysis vintage, comorbidities, dry weight, functional status, study phase, and study group.
 
+Patient creation is connected end-to-end through `POST /api/patients`. The workflow validates required clinical/research fields, prevents duplicate patient codes, applies safe study defaults, and persists records to the active database before they become available to patient lists and downstream research summaries.
+
 Each dialysis session records operational details such as session date, start/end time, ultrafiltration, blood flow, dialysate settings, and session status.
 
 Intradialytic monitoring captures repeated vital sign measurements during a session. These observations feed NEWS2 assessment records.

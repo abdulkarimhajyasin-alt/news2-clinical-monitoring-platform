@@ -30,6 +30,39 @@ class PatientRead(BaseModel):
     is_anonymized: bool
 
 
+class PatientCreate(BaseModel):
+    patient_code: str = Field(min_length=2, max_length=80)
+    full_name: str = Field(min_length=2, max_length=160)
+    age: int = Field(ge=0, le=130)
+    gender: Literal["male", "female"]
+    target_dry_weight: float | None = Field(default=None, gt=0, le=500)
+    dialysis_start_date: date | None = None
+    dialysis_vintage_months: int | None = Field(default=None, ge=0, le=1200)
+    weekly_sessions_count: int | None = Field(default=3, ge=1, le=14)
+    comorbidities: str | None = Field(default=None, max_length=4000)
+    charlson_comorbidity_index: int | None = Field(default=None, ge=0, le=40)
+    baseline_functional_status: str | None = Field(default=None, max_length=4000)
+    study_phase: Literal["pre_implementation", "post_implementation"] = "post_implementation"
+    study_group: Literal["control", "intervention"] = "intervention"
+    is_anonymized: bool = True
+
+    @field_validator("patient_code")
+    @classmethod
+    def normalize_patient_code(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @field_validator("full_name", "comorbidities", "baseline_functional_status")
+    @classmethod
+    def strip_patient_text(cls, value: str | None) -> str | None:
+        return value.strip() if isinstance(value, str) else value
+
+
+class PatientCreateResult(BaseModel):
+    patient: PatientRead
+    patient_created: bool
+    message: str
+
+
 class DialysisSessionRead(BaseModel):
     id: int
     patient_id: int

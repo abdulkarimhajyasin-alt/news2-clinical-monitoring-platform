@@ -72,10 +72,13 @@ Phase 13 adds the Study Management & Research Protocol Center. It manages `resea
 
 Phase 14 adds the RBAC foundation. It centralizes role permissions, exposes `/api/rbac/me` and `/api/rbac/permissions`, protects sensitive exports, analytics, study management, clinical writes, and alert lifecycle actions, and adds a temporary `X-Dev-Role` development context until Phase 15 authentication.
 
+The patient creation workflow is now connected to the backend. The Add Patient screen posts to `POST /api/patients`, persists the patient in SQLite/PostgreSQL, refreshes the patient list, and uses RBAC `patients:create`.
+
 Screens now using real database-backed data:
 
 - Dashboard: `/api/research/summary`, `/api/alerts`, `/api/patients`, `/api/dialysis-sessions`
 - Patient List: `/api/patients`
+- Add Patient: `POST /api/patients`
 - Dialysis Session List: `/api/dialysis-sessions`
 - Active Alerts: `/api/alerts`
 - Research Dashboard: `/api/research/summary`
