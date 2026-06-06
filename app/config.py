@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     service_name: str = "news2-hemodialysis-monitoring"
     database_url: str = Field(default="sqlite:///./news2_hemodialysis.db")
+    auto_seed: bool = True
     static_dir: Path = Path(__file__).resolve().parent / "static"
 
     model_config = {

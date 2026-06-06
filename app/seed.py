@@ -36,8 +36,9 @@ def _json(value: list[str]) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def seed_database(db: Session) -> dict[str, int | str]:
-    create_database()
+def seed_database(db: Session, *, ensure_schema: bool = True) -> dict[str, int | str]:
+    if ensure_schema:
+        create_database()
     existing = db.query(SystemSetting).filter(SystemSetting.setting_key == "seed_version").first()
     if existing:
         return {"status": "already_seeded", "seed_version": existing.setting_value}

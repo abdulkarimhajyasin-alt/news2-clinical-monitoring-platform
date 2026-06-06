@@ -32,6 +32,8 @@ The Phase 13 study management layer sits above the dataset and analytics layers.
 
 The Phase 14 RBAC layer centralizes role labels, permission strings, and the permission matrix in `app/rbac.py`. Sensitive research, study, alert-management, and clinical write endpoints depend on reusable permission checks. The temporary development resolver reads `X-Dev-Role` and defaults to `admin` only until Phase 15 authentication replaces it.
 
+Deployment startup initializes the database before requests are served. The startup helper creates missing tables with SQLAlchemy metadata, never drops existing tables, and optionally seeds demo/research data only when the users/patients tables are empty.
+
 Later export phases should add governed dataset approvals, richer analysis outputs, and institution-specific review controls.
 
 Audit logs record sensitive actions across system entities for traceability.

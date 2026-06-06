@@ -1,10 +1,18 @@
 from pathlib import Path
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.routers import admin, alerts, deterioration, dialysis_sessions, health, monitoring, news2, outcomes, patients, rbac, research, research_analytics, research_exports, response_tracking, responses, studies
+from app.startup import initialize_application_database
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    initialize_application_database()
+    yield
 
 
 settings = get_settings()
@@ -12,6 +20,7 @@ app = FastAPI(
     title="NEWS2 Hemodialysis Monitoring Platform",
     description="Arabic-first clinical research platform for hemodialysis NEWS2 monitoring.",
     version="0.2.0",
+    lifespan=lifespan,
 )
 
 app.include_router(health.router)

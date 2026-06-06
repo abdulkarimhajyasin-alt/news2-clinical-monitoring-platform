@@ -27,6 +27,13 @@ python -m app.seed
 
 This creates local SQLite tables and inserts fake anonymized clinical research data.
 
+On application startup the platform also runs safe database initialization:
+
+- missing tables are created with SQLAlchemy `create_all`
+- existing tables are not dropped or reset
+- demo seed data is inserted only when users/patients are empty
+- `NEWS2_AUTO_SEED=false` disables automatic seeding but not table creation
+
 ## Run Locally
 
 ```bash
