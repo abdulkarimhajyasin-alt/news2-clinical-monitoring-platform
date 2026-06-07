@@ -2,6 +2,8 @@ from datetime import date, datetime
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from app.rbac import ROLE_PERMISSIONS
+
 
 class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -13,6 +15,99 @@ class UserRead(BaseModel):
     department: str | None = None
     status: str
     preferred_language: str
+
+
+class StaffUserRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    full_name: str
+    username: str | None = None
+    email: str
+    phone: str | None = None
+    department: str | None = None
+    job_title: str | None = None
+    role: str
+    is_active: bool
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class StaffUserCreate(BaseModel):
+    full_name: str = Field(min_length=2, max_length=160)
+    username: str = Field(min_length=2, max_length=80)
+    email: str | None = Field(default=None, max_length=255)
+    phone: str | None = Field(default=None, max_length=40)
+    department: str | None = Field(default=None, max_length=120)
+    job_title: str | None = Field(default=None, max_length=120)
+    role: str
+    temporary_password: str = Field(min_length=8, max_length=256)
+    is_active: bool = True
+
+    @field_validator("full_name", "username", "phone", "department", "job_title", "role", "temporary_password")
+    @classmethod
+    def strip_staff_text(cls, value: str | None) -> str | None:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("email")
+    @classmethod
+    def validate_staff_email(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return None
+        value = value.strip().lower()
+        if "@" not in value or value.startswith("@") or value.endswith("@"):
+            raise ValueError("invalid email")
+        return value
+
+    @field_validator("role")
+    @classmethod
+    def validate_staff_role(cls, value: str) -> str:
+        if value not in ROLE_PERMISSIONS:
+            raise ValueError("invalid role")
+        return value
+
+
+class StaffUserUpdate(BaseModel):
+    full_name: str | None = Field(default=None, min_length=2, max_length=160)
+    email: str | None = Field(default=None, max_length=255)
+    phone: str | None = Field(default=None, max_length=40)
+    department: str | None = Field(default=None, max_length=120)
+    job_title: str | None = Field(default=None, max_length=120)
+    role: str | None = None
+    is_active: bool | None = None
+
+    @field_validator("full_name", "phone", "department", "job_title", "role")
+    @classmethod
+    def strip_update_staff_text(cls, value: str | None) -> str | None:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("email")
+    @classmethod
+    def validate_update_staff_email(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return None
+        value = value.strip().lower()
+        if "@" not in value or value.startswith("@") or value.endswith("@"):
+            raise ValueError("invalid email")
+        return value
+
+    @field_validator("role")
+    @classmethod
+    def validate_update_staff_role(cls, value: str | None) -> str | None:
+        if value is not None and value not in ROLE_PERMISSIONS:
+            raise ValueError("invalid role")
+        return value
+
+
+class StaffUserStatusUpdate(BaseModel):
+    is_active: bool
+
+
+class StaffUserCreateResult(BaseModel):
+    user: StaffUserRead
+    user_created: bool
+    message: str
 
 
 class PatientRead(BaseModel):

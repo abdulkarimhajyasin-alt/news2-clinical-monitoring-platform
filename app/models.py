@@ -8,6 +8,7 @@ from app.database import Base
 
 class UserRole(StrEnum):
     admin = "admin"
+    technical_admin = "technical_admin"
     doctor = "doctor"
     on_call_doctor = "on_call_doctor"
     nurse = "nurse"
@@ -97,11 +98,14 @@ class User(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     full_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    username: Mapped[str | None] = mapped_column(String(80), unique=True, index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(40), nullable=False)
     department: Mapped[str | None] = mapped_column(String(120))
+    job_title: Mapped[str | None] = mapped_column(String(120))
     phone: Mapped[str | None] = mapped_column(String(40))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     status: Mapped[str] = mapped_column(String(40), default="active", nullable=False)
     preferred_language: Mapped[str] = mapped_column(String(10), default="ar", nullable=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

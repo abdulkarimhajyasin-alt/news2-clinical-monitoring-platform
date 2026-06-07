@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from app.rbac import DevUser, get_current_dev_user, permission_matrix
+from app.rbac import DevUser, get_current_dev_user, permission_matrix, require_permission
 
 router = APIRouter(prefix="/api/rbac", tags=["rbac"])
 
@@ -16,5 +16,5 @@ def read_current_permission_context(current_user: DevUser = Depends(get_current_
 
 
 @router.get("/permissions")
-def read_permission_matrix():
+def read_permission_matrix(_current_user=Depends(require_permission("rbac:view"))):
     return permission_matrix()

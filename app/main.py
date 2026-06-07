@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
-from app.routers import admin, alerts, deterioration, dialysis_sessions, health, monitoring, news2, outcomes, patients, rbac, research, research_analytics, research_exports, response_tracking, responses, studies
+from app.routers import admin, alerts, deterioration, dialysis_sessions, health, monitoring, news2, outcomes, patients, rbac, research, research_analytics, research_exports, response_tracking, responses, studies, users
 from app.startup import initialize_application_database
 
 
@@ -38,6 +38,7 @@ app.include_router(responses.router)
 app.include_router(response_tracking.router)
 app.include_router(outcomes.router)
 app.include_router(studies.router)
+app.include_router(users.router)
 app.include_router(admin.router)
 
 static_dir = Path(settings.static_dir)

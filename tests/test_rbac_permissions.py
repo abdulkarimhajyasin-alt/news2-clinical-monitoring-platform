@@ -34,7 +34,7 @@ def rbac_client(tmp_path):
 
 
 def test_role_permission_matrix_contains_all_roles():
-    assert set(ROLE_PERMISSIONS) == {"admin", "doctor", "on_call_doctor", "nurse", "researcher"}
+    assert set(ROLE_PERMISSIONS) == {"admin", "technical_admin", "doctor", "on_call_doctor", "nurse", "researcher"}
 
 
 def test_admin_has_all_permissions():

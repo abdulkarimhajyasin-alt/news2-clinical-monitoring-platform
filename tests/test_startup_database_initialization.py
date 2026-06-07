@@ -44,7 +44,7 @@ def test_seed_flow_does_not_duplicate_data(tmp_path):
     try:
         assert first["status"] == "seeded"
         assert second["status"] == "already_seeded"
-        assert db.query(User).count() == 4
+        assert db.query(User).count() == 5
         assert db.query(Patient).count() == 3
     finally:
         db.close()

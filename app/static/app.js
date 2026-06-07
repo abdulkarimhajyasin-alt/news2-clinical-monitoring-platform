@@ -33,6 +33,7 @@ const routes = [
   { id: "dataset-statistics", label: "إحصاءات البيانات", group: "البحث", icon: "DS", type: "analytics" },
   { id: "export-center", label: "مركز التصدير", group: "البحث", icon: "EX", type: "export" },
   { id: "users", label: "المستخدمون", group: "الإدارة", icon: "U", type: "table", entity: "users" },
+  { id: "create-user", label: "إضافة موظف", group: "الإدارة", icon: "+U", type: "form", entity: "staff" },
   { id: "roles", label: "الأدوار", group: "الإدارة", icon: "RO", type: "table", entity: "roles" },
   { id: "permissions", label: "الصلاحيات", group: "الإدارة", icon: "PR", type: "permissions" },
   { id: "audit-logs", label: "سجلات التدقيق", group: "الإدارة", icon: "AL", type: "table", entity: "audit" },
@@ -134,11 +135,12 @@ const NAV_GROUPS = [
     icon: "U",
     children: [
       { route: "users", permission: "users:view" },
-      { route: "roles" },
-      { route: "permissions" },
+      { route: "create-user", permission: "users:create" },
+      { route: "roles", permission: "rbac:view" },
+      { route: "permissions", permission: "rbac:view" },
       { route: "audit-logs", permission: "audit:view" },
       { route: "system-settings", permission: "settings:view" },
-      { route: "language-settings" }
+      { route: "language-settings", permission: "settings:view" }
     ]
   }
 ];
@@ -213,12 +215,14 @@ const appState = {
   researchExportFilters: {},
   researchAnalyticsSummary: null,
   studies: [],
+  staffUsers: [],
   selectedStudyId: null,
   selectedPatientId: null,
   patientProfileSearch: "",
   studyReadiness: null,
   studyCenter: null,
   studySubmission: null,
+  staffSubmission: null,
   currentRole: localStorage.getItem("news2DevRole") || "admin",
   currentRoleLabel: "مدير النظام",
   permissions: [],
@@ -256,6 +260,23 @@ const api = {
   },
   getPermissionMatrix() {
     return this.request("/api/rbac/permissions").then(normalizePermissionMatrix);
+  },
+  getStaffUsers(filters = {}) {
+    return this.request(`/api/users${queryString(filters)}`).then((rows) => rows.map(normalizeStaffUser));
+  },
+  createStaffUser(payload) {
+    return this.request("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+  },
+  updateStaffUserStatus(userId, payload) {
+    return this.request(`/api/users/${userId}/status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(normalizeStaffUser);
   },
   getPatients() {
     return this.request("/api/patients").then((rows) => rows.map(normalizePatient));
@@ -417,6 +438,23 @@ function normalizePermissionMatrix(data) {
     roles: data?.roles || [],
     permissions: data?.permissions || [],
     isDevContext: data?.is_dev_context === true
+  };
+}
+
+function normalizeStaffUser(row) {
+  return {
+    id: row.id,
+    fullName: row.full_name || "",
+    username: row.username || "",
+    email: row.email || "",
+    phone: row.phone || "",
+    department: row.department || "",
+    jobTitle: row.job_title || "",
+    role: row.role || "",
+    isActive: row.is_active === true,
+    status: row.status || (row.is_active ? "active" : "inactive"),
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null
   };
 }
 
@@ -807,6 +845,14 @@ const labels = {
     emergency_department_transfer: "تحويل إلى الطوارئ",
     icu_admission: "دخول العناية المركزة",
     death: "وفاة"
+  },
+  role: {
+    admin: "مدير النظام",
+    technical_admin: "تقني النظام",
+    doctor: "طبيب",
+    on_call_doctor: "طبيب مناوب",
+    nurse: "ممرض/ممرضة",
+    researcher: "باحث"
   }
 };
 
@@ -1057,6 +1103,7 @@ function emptyBlock(text) {
 function renderDevRoleSwitcher() {
   const roles = [
     ["admin", "مدير"],
+    ["technical_admin", "تقني النظام"],
     ["doctor", "طبيب"],
     ["on_call_doctor", "مناوب"],
     ["nurse", "تمريض"],
@@ -1170,6 +1217,7 @@ function ensureDataForRoute(route) {
     if (!appState.dialysisSessions.length && !appState.loading.dialysisSessions) loadResource("dialysisSessions", api.getDialysisSessions.bind(api));
   }
   if (route.type === "patients" && !appState.patients.length && !appState.loading.patients) loadResource("patients", api.getPatients.bind(api));
+  if (route.id === "users" && !appState.staffUsers.length && !appState.loading.staffUsers) loadResource("staffUsers", api.getStaffUsers.bind(api));
   if (route.type === "profile") {
     if (!appState.patients.length && !appState.loading.patients) loadResource("patients", api.getPatients.bind(api));
     if (!appState.dialysisSessions.length && !appState.loading.dialysisSessions) loadResource("dialysisSessions", api.getDialysisSessions.bind(api));
@@ -1612,6 +1660,9 @@ function renderActionKpi(item, routeId, ariaLabel, critical = false) {
 }
 
 function renderStaticTable(route) {
+  if (route.entity === "users") {
+    return renderStaffUsers();
+  }
   if (route.entity === "roles") {
     return renderRolesMatrix();
   }
@@ -1730,9 +1781,75 @@ function formatCell(cell) {
   return escapeHtml(value);
 }
 
+function roleOptions(selected = "") {
+  const order = ["admin", "technical_admin", "doctor", "on_call_doctor", "nurse", "researcher"];
+  return order.map((role) => `<option value="${role}" ${selected === role ? "selected" : ""}>${escapeHtml(label(labels.role, role))}</option>`).join("");
+}
+
+function renderStaffUsers() {
+  if (appState.loading.staffUsers) return tableSkeleton("جاري تحميل المستخدمين...");
+  if (appState.errors.staffUsers) return errorBlock("staffUsers");
+  const canCreate = hasPermission("users:create");
+  const rows = appState.staffUsers.map((user) => [
+    user.fullName,
+    user.username || "-",
+    user.email,
+    user.department || "-",
+    user.jobTitle || "-",
+    label(labels.role, user.role),
+    badge(user.isActive ? "نشط" : "موقوف", user.isActive ? "success" : "warning"),
+    renderStaffUserActions(user)
+  ]);
+  return `
+    <div class="footer-actions profile-actions">
+      ${canCreate ? `<button class="btn primary" type="button" onclick="setRoute('create-user')">إضافة موظف</button>` : ""}
+    </div>
+    <div class="grid cols-3">
+      ${renderKpi(["إجمالي المستخدمين", appState.staffUsers.length, "users", "info"])}
+      ${renderKpi(["نشط", appState.staffUsers.filter((user) => user.isActive).length, "حسابات مفعلة", "success"])}
+      ${renderKpi(["أدوار", new Set(appState.staffUsers.map((user) => user.role)).size, "RBAC", "info"])}
+    </div>
+    <div style="margin-top:16px">${card("إدارة المستخدمين", rows.length ? renderTable(["الاسم الكامل", "اسم المستخدم", "البريد الإلكتروني", "القسم", "الوظيفة", "الدور", "الحالة", "إجراءات"], rows) : emptyBlock("لا توجد حسابات مستخدمين حتى الآن"))}</div>`;
+}
+
+function renderStaffUserActions(user) {
+  const actions = [];
+  if (hasPermission("users:update")) actions.push(`<button class="btn small" type="button" onclick="setRoute('create-user')">تعديل</button>`);
+  if (hasPermission("users:disable")) actions.push(`<button class="btn small" type="button" onclick="toggleStaffUserStatus(${user.id}, ${user.isActive ? "false" : "true"})">${user.isActive ? "إيقاف" : "تفعيل"}</button>`);
+  return actions.length ? `<div class="table-actions">${actions.join("")}</div>` : "-";
+}
+
+function renderStaffCreateForm() {
+  const canCreate = hasPermission("users:create");
+  return card("إضافة موظف", `
+    ${appState.staffSubmission ? `<div class="state-message success"><strong>${escapeHtml(appState.staffSubmission)}</strong></div>` : ""}
+    ${appState.errors.staffSubmission ? `<div class="state-message error" role="alert"><strong>تعذر إنشاء الموظف</strong><span>${escapeHtml(staffErrorMessage(appState.errors.staffSubmission))}</span></div>` : ""}
+    <form class="form-grid" onsubmit="submitStaffUser(event)">
+      <div class="field"><label>الاسم الكامل</label><input name="full_name" required></div>
+      <div class="field"><label>اسم المستخدم</label><input name="username" required></div>
+      <div class="field"><label>البريد الإلكتروني</label><input name="email" type="email"></div>
+      <div class="field"><label>رقم الهاتف</label><input name="phone"></div>
+      <div class="field"><label>القسم</label><input name="department" list="departmentOptions"></div>
+      <div class="field"><label>الوظيفة / المهمة</label><input name="job_title" list="jobTitleOptions"></div>
+      <div class="field"><label>الدور</label><select name="role" required>${roleOptions("doctor")}</select></div>
+      <div class="field"><label>كلمة مرور مؤقتة</label><input name="temporary_password" type="password" minlength="8" required></div>
+      <div class="field"><label>الحالة</label><select name="is_active"><option value="true">نشط</option><option value="false">موقوف</option></select></div>
+      <datalist id="jobTitleOptions"><option value="طبيب كلى"></option><option value="طبيب مناوب"></option><option value="ممرض غسيل"></option><option value="باحث سريري"></option><option value="تقني نظام"></option><option value="مدير منصة"></option></datalist>
+      <datalist id="departmentOptions"><option value="Nephrology"></option><option value="Dialysis Unit"></option><option value="Clinical Research"></option><option value="Information Technology"></option><option value="Administration"></option></datalist>
+      <div class="footer-actions full"><button class="btn primary" type="submit" ${canCreate && !appState.loading.staffSubmission ? "" : "disabled"}>${appState.loading.staffSubmission ? "جاري الحفظ..." : "حفظ الموظف"}</button><button class="btn" type="button" onclick="setRoute('users')">إلغاء</button></div>
+    </form>`);
+}
+
+function staffErrorMessage(message) {
+  if (String(message || "").includes("already exists")) return "اسم المستخدم أو البريد الإلكتروني مستخدم مسبقاً";
+  if (String(message || "").includes("invalid role")) return "الدور المحدد غير صالح";
+  return message || "تعذر حفظ الموظف";
+}
+
 function renderFormScreen(route) {
   if (route.entity === "vitals") return renderVitalSignsEntry();
   if (route.entity === "patient") return renderPatientCreateForm(route);
+  if (route.entity === "staff") return renderStaffCreateForm();
   const fields = formFields[route.entity] || formFields.patient;
   return card(route.label, `<div class="form-grid">${fields.map((field, index) => `<div class="field ${index === fields.length - 1 ? "full" : ""}"><label>${field}</label>${index === fields.length - 1 ? `<textarea placeholder="${field}"></textarea>` : `<input placeholder="${field}">`}</div>`).join("")}</div><div class="footer-actions"><button class="btn primary">حفظ</button><button class="btn">حفظ كمسودة</button><button class="btn">إلغاء</button></div>`);
 }
@@ -2029,6 +2146,47 @@ async function submitPatientCreate(event) {
     appState.loading.patientSubmission = false;
     render();
   }
+}
+
+async function submitStaffUser(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  appState.loading.staffSubmission = true;
+  appState.errors.staffSubmission = null;
+  appState.staffSubmission = null;
+  render();
+  try {
+    await api.createStaffUser({
+      full_name: data.get("full_name"),
+      username: data.get("username"),
+      email: data.get("email") || null,
+      phone: data.get("phone") || null,
+      department: data.get("department") || null,
+      job_title: data.get("job_title") || null,
+      role: data.get("role"),
+      temporary_password: data.get("temporary_password"),
+      is_active: data.get("is_active") === "true"
+    });
+    appState.staffUsers = await api.getStaffUsers();
+    appState.staffSubmission = "تم إنشاء الموظف بنجاح";
+    setRoute("users");
+  } catch (error) {
+    appState.errors.staffSubmission = error.message || "تعذر حفظ الموظف";
+  } finally {
+    appState.loading.staffSubmission = false;
+    render();
+  }
+}
+
+async function toggleStaffUserStatus(userId, isActive) {
+  appState.errors.staffUsers = null;
+  try {
+    const updated = await api.updateStaffUserStatus(userId, { is_active: isActive });
+    appState.staffUsers = appState.staffUsers.map((user) => (user.id === updated.id ? updated : user));
+  } catch (error) {
+    appState.errors.staffUsers = error.message || "تعذر تحديث حالة المستخدم";
+  }
+  render();
 }
 
 async function submitDeteriorationEvent(event) {
@@ -2864,8 +3022,23 @@ function renderPermissions() {
 
 function renderRolesMatrix() {
   const roles = appState.permissionMatrix?.roles || [];
-  const rows = roles.map((role) => [role.role, role.role_label, (role.permissions || []).length, role.role === appState.currentRole ? badge("الدور الحالي", "info") : "-"]);
-  return card("الأدوار", rows.length ? renderTable(["الدور", "التسمية", "عدد الصلاحيات", "الحالة"], rows) : emptyBlock("لم يتم تحميل الأدوار بعد"));
+  const rows = roles.map((role) => [
+    role.role,
+    role.role_label,
+    permissionGroupSummary(role.permissions || []),
+    (role.permissions || []).length,
+    role.role === appState.currentRole ? badge("الدور الحالي", "info") : "-"
+  ]);
+  return card("الأدوار", rows.length ? renderTable(["الدور", "التسمية", "مجموعات الصلاحيات", "عدد الصلاحيات", "الحالة"], rows) : emptyBlock("لم يتم تحميل الأدوار بعد"));
+}
+
+function permissionGroupSummary(permissions) {
+  const groups = permissions.reduce((acc, permission) => {
+    const [group] = String(permission).split(":");
+    acc[group] = (acc[group] || 0) + 1;
+    return acc;
+  }, {});
+  return Object.entries(groups).map(([group, count]) => `${group} (${count})`).join(", ");
 }
 
 async function changeDevRole(role) {
@@ -2923,6 +3096,8 @@ function render() {
 window.setRoute = setRoute;
 window.calculateNews2Demo = calculateNews2Demo;
 window.submitPatientCreate = submitPatientCreate;
+window.submitStaffUser = submitStaffUser;
+window.toggleStaffUserStatus = toggleStaffUserStatus;
 window.submitMonitoringMeasurement = submitMonitoringMeasurement;
 window.submitDeteriorationEvent = submitDeteriorationEvent;
 window.submitClinicalResponse = submitClinicalResponse;

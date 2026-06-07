@@ -46,10 +46,11 @@ def seed_database(db: Session, *, ensure_schema: bool = True) -> dict[str, int |
     now = datetime.now(timezone.utc).replace(microsecond=0)
 
     users = [
-        User(full_name="د. باحث سريري 01", email="admin@example.local", password_hash="not-for-auth-phase", role=UserRole.admin, department="Research", phone="+0000000001"),
-        User(full_name="د. طبيب كلى 01", email="doctor@example.local", password_hash="not-for-auth-phase", role=UserRole.doctor, department="Nephrology", phone="+0000000002"),
-        User(full_name="تمريض غسيل 01", email="nurse@example.local", password_hash="not-for-auth-phase", role=UserRole.nurse, department="Dialysis Unit", phone="+0000000003"),
-        User(full_name="باحث بيانات 01", email="researcher@example.local", password_hash="not-for-auth-phase", role=UserRole.researcher, department="Clinical Research", phone="+0000000004"),
+        User(full_name="د. باحث سريري 01", username="admin", email="admin@example.local", password_hash="not-for-auth-phase", role=UserRole.admin, department="Research", job_title="Platform Administrator", phone="+0000000001", is_active=True),
+        User(full_name="د. طبيب كلى 01", username="doctor", email="doctor@example.local", password_hash="not-for-auth-phase", role=UserRole.doctor, department="Nephrology", job_title="Nephrologist", phone="+0000000002", is_active=True),
+        User(full_name="تمريض غسيل 01", username="nurse", email="nurse@example.local", password_hash="not-for-auth-phase", role=UserRole.nurse, department="Dialysis Unit", job_title="Dialysis Nurse", phone="+0000000003", is_active=True),
+        User(full_name="باحث بيانات 01", username="researcher", email="researcher@example.local", password_hash="not-for-auth-phase", role=UserRole.researcher, department="Clinical Research", job_title="Clinical Researcher", phone="+0000000004", is_active=True),
+        User(full_name="تقني النظام 01", username="techadmin", email="technical.admin@example.local", password_hash="not-for-auth-phase", role=UserRole.technical_admin, department="Information Technology", job_title="System Technical Admin", phone="+0000000005", is_active=True),
     ]
     db.add_all(users)
     db.flush()

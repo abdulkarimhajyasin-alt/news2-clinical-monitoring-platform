@@ -11,6 +11,7 @@ from app.models import AuditLog
 
 
 ROLE_ADMIN = "admin"
+ROLE_TECHNICAL_ADMIN = "technical_admin"
 ROLE_DOCTOR = "doctor"
 ROLE_ON_CALL_DOCTOR = "on_call_doctor"
 ROLE_NURSE = "nurse"
@@ -18,6 +19,7 @@ ROLE_RESEARCHER = "researcher"
 
 ROLE_LABELS = {
     ROLE_ADMIN: "مدير النظام",
+    ROLE_TECHNICAL_ADMIN: "تقني النظام",
     ROLE_DOCTOR: "طبيب",
     ROLE_ON_CALL_DOCTOR: "طبيب مناوب",
     ROLE_NURSE: "ممرض/ممرضة",
@@ -49,7 +51,15 @@ PERMISSIONS = {
     "studies:create",
     "studies:update",
     "users:view",
+    "users:create",
+    "users:update",
+    "users:disable",
     "users:manage",
+    "rbac:view",
+    "rbac:manage",
+    "staff:view",
+    "staff:create",
+    "staff:update",
     "audit:view",
     "settings:view",
     "settings:manage",
@@ -57,6 +67,25 @@ PERMISSIONS = {
 
 ROLE_PERMISSIONS = {
     ROLE_ADMIN: set(PERMISSIONS),
+    ROLE_TECHNICAL_ADMIN: {
+        "users:view",
+        "users:create",
+        "users:update",
+        "users:disable",
+        "users:manage",
+        "rbac:view",
+        "rbac:manage",
+        "staff:view",
+        "staff:create",
+        "staff:update",
+        "audit:view",
+        "settings:view",
+        "settings:manage",
+        "patients:view",
+        "sessions:view",
+        "alerts:view",
+        "research:view",
+    },
     ROLE_DOCTOR: {
         "patients:view",
         "patients:create",
@@ -78,7 +107,6 @@ ROLE_PERMISSIONS = {
         "research:view",
         "research:analytics",
         "studies:view",
-        "audit:view",
     },
     ROLE_ON_CALL_DOCTOR: {
         "patients:view",
@@ -123,7 +151,6 @@ ROLE_PERMISSIONS = {
         "studies:view",
         "studies:create",
         "studies:update",
-        "audit:view",
     },
 }
 

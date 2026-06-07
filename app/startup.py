@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
+from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -20,7 +21,25 @@ def initialize_database(db_engine: Engine = engine) -> None:
 
     logger.info("Initializing database tables...")
     Base.metadata.create_all(bind=db_engine)
+    ensure_user_management_columns(db_engine)
     logger.info("Database tables ready.")
+
+
+def ensure_user_management_columns(db_engine: Engine = engine) -> None:
+    inspector = inspect(db_engine)
+    if "users" not in inspector.get_table_names():
+        return
+    existing_columns = {column["name"] for column in inspector.get_columns("users")}
+    column_sql = {
+        "username": "VARCHAR(80)",
+        "job_title": "VARCHAR(120)",
+        "is_active": "BOOLEAN DEFAULT TRUE NOT NULL",
+    }
+    with db_engine.begin() as connection:
+        for column_name, sql_type in column_sql.items():
+            if column_name not in existing_columns:
+                connection.execute(text(f"ALTER TABLE users ADD COLUMN {column_name} {sql_type}"))
+        connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON users (username)"))
 
 
 def seed_database_if_empty(

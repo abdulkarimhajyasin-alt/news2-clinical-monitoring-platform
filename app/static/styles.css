@@ -694,6 +694,17 @@ body.nav-collapsed .sidebar {
   margin-bottom: 14px;
 }
 
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn.small {
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

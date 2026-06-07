@@ -1,10 +1,11 @@
 # Role Based Access Control Foundation
 
-Phase 14 adds centralized RBAC for the NEWS2 Hemodialysis Monitoring Platform.
+Phase 14 added centralized RBAC for the NEWS2 Hemodialysis Monitoring Platform. Phase 15 hardens it with enterprise staff management and the `technical_admin` role.
 
 ## Roles
 
 - `admin`: مدير النظام
+- `technical_admin`: تقني النظام
 - `doctor`: طبيب
 - `on_call_doctor`: طبيب مناوب
 - `nurse`: ممرض/ممرضة
@@ -19,6 +20,11 @@ Permissions use stable `resource:action` strings such as:
 - `alerts:manage`
 - `research:export`
 - `studies:update`
+- `users:create`
+- `users:update`
+- `users:disable`
+- `rbac:view`
+- `rbac:manage`
 - `audit:view`
 - `settings:manage`
 
@@ -26,7 +32,7 @@ The permission matrix is centralized in `app/rbac.py`.
 
 ## Development User Context
 
-Until Phase 15 authentication is implemented, the backend reads a temporary development role from:
+Until Phase 16 authentication is implemented, the backend reads a temporary development role from:
 
 ```text
 X-Dev-Role
@@ -39,7 +45,8 @@ This is not production authentication.
 ## RBAC API
 
 - `GET /api/rbac/me`: returns the current development role and permissions.
-- `GET /api/rbac/permissions`: returns the full role and permission matrix.
+- `GET /api/rbac/permissions`: returns the full role and permission matrix. Requires `rbac:view`.
+- `/api/users`: staff user management endpoints. Require `users:view`, `users:create`, `users:update`, or `users:disable`.
 
 ## Protected Endpoints
 
@@ -69,10 +76,12 @@ The frontend loads `/api/rbac/me`, stores the current role and permissions, and 
 
 Restricted export buttons and study-management actions are hidden or disabled with Arabic messages.
 
+The Administration navigation group is visible only to roles with administration permissions. By default that means `admin` and `technical_admin`; `doctor`, `on_call_doctor`, `nurse`, and `researcher` do not see the Administration group.
+
 ## Audit Logging
 
 Permission denials write a simple `permission_denied` audit log with role, permission, and path when the database is available.
 
 ## Limitations
 
-Phase 14 does not implement login, password validation, sessions, cookies, JWT, password reset, or production authentication. Phase 15 must replace the development header resolver with authenticated current-user resolution.
+Phase 15 does not implement login, sessions, cookies, JWT, password reset, MFA, or production authentication. It stores hashed temporary passwords for staff accounts so Phase 16 can add real authentication safely.

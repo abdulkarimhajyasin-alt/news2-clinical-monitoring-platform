@@ -70,7 +70,9 @@ Phase 12 adds the Research Analytics Dashboard. It provides descriptive KPIs, NE
 
 Phase 13 adds the Study Management & Research Protocol Center. It manages `research_studies`, protocol configuration, study timeline visibility, readiness scoring, and audit logs for study creation, updates, and readiness review.
 
-Phase 14 adds the RBAC foundation. It centralizes role permissions, exposes `/api/rbac/me` and `/api/rbac/permissions`, protects sensitive exports, analytics, study management, clinical writes, and alert lifecycle actions, and adds a temporary `X-Dev-Role` development context until Phase 15 authentication.
+Phase 14 adds the RBAC foundation. It centralizes role permissions, exposes `/api/rbac/me` and `/api/rbac/permissions`, protects sensitive exports, analytics, study management, clinical writes, and alert lifecycle actions, and adds a temporary `X-Dev-Role` development context until Phase 16 authentication.
+
+Phase 15 adds enterprise user management and RBAC hardening. It introduces the `technical_admin` role, staff creation/list/update/status APIs under `/api/users`, hashed temporary password storage, and Administration navigation visibility for admin/technical-admin permissions. This is not full authentication; Phase 16 must add real login, sessions/JWT, logout, and password verification.
 
 The patient creation workflow is now connected to the backend. The Add Patient screen posts to `POST /api/patients`, persists the patient in SQLite/PostgreSQL, refreshes the patient list, and uses RBAC `patients:create`.
 
@@ -94,6 +96,7 @@ Screens now using real database-backed data:
 - Research Analytics: `/api/research/analytics/summary`, `/api/research/analytics/news2-distribution`, `/api/research/analytics/outcomes`, `/api/research/analytics/response-times`, `/api/research/analytics/deterioration`, `/api/research/analytics/group-comparison`
 - Study Management: `/api/studies`, `/api/studies/{study_id}`, `/api/studies/{study_id}/readiness`
 - RBAC: `/api/rbac/me`, `/api/rbac/permissions`
+- User Management: `/api/users`, `/api/users/{id}`, `/api/users/{id}/status`
 
 The frontend includes scoped Arabic loading, error, and empty states. It also shows a subtle backend connection indicator based on `/health`.
 
