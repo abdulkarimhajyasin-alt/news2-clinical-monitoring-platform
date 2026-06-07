@@ -1171,7 +1171,7 @@ function renderShell(route) {
     appState.expandedNavGroups.add(activeGroup.label);
     localStorage.setItem("news2ExpandedNavGroups", JSON.stringify([...appState.expandedNavGroups]));
   }
-  document.body.classList.toggle("nav-collapsed", appState.navCollapsed);
+  applySidebarState();
   app.innerHTML = `
     <div class="shell" id="app-shell">
       <div class="nav-scrim" onclick="closeSidebar()" aria-hidden="true"></div>
