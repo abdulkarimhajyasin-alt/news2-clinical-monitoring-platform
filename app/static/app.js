@@ -887,9 +887,55 @@ function toggleNavGroup(label) {
   render();
 }
 
+const MOBILE_NAV_QUERY = "(max-width: 1120px)";
+
+function isMobileNavMode() {
+  return window.matchMedia(MOBILE_NAV_QUERY).matches;
+}
+
+function applySidebarState() {
+  document.body.classList.toggle("nav-collapsed", appState.navCollapsed);
+  const menuButton = document.querySelector(".menu-toggle");
+  if (menuButton) {
+    const expanded = isMobileNavMode() ? document.body.classList.contains("nav-open") : !appState.navCollapsed;
+    menuButton.setAttribute("aria-expanded", String(expanded));
+  }
+}
+
+function openSidebar() {
+  if (isMobileNavMode()) {
+    document.body.classList.add("nav-open");
+    applySidebarState();
+    return;
+  }
+  if (!appState.navCollapsed) {
+    applySidebarState();
+    return;
+  }
+  appState.navCollapsed = false;
+  localStorage.setItem("news2NavCollapsed", String(appState.navCollapsed));
+  render();
+}
+
+function closeSidebar() {
+  if (isMobileNavMode()) {
+    document.body.classList.remove("nav-open");
+    applySidebarState();
+    return;
+  }
+  if (appState.navCollapsed) {
+    applySidebarState();
+    return;
+  }
+  appState.navCollapsed = true;
+  localStorage.setItem("news2NavCollapsed", String(appState.navCollapsed));
+  render();
+}
+
 function toggleSidebar() {
-  if (window.matchMedia("(max-width: 1120px)").matches) {
-    document.body.classList.toggle("nav-open");
+  if (isMobileNavMode()) {
+    if (document.body.classList.contains("nav-open")) closeSidebar();
+    else openSidebar();
     return;
   }
   appState.navCollapsed = !appState.navCollapsed;
@@ -899,6 +945,7 @@ function toggleSidebar() {
 
 function closeMobileNav() {
   document.body.classList.remove("nav-open");
+  applySidebarState();
 }
 
 function currentRoute() {
@@ -1127,12 +1174,12 @@ function renderShell(route) {
   document.body.classList.toggle("nav-collapsed", appState.navCollapsed);
   app.innerHTML = `
     <div class="shell" id="app-shell">
-      <div class="nav-scrim" onclick="closeMobileNav()" aria-hidden="true"></div>
+      <div class="nav-scrim" onclick="closeSidebar()" aria-hidden="true"></div>
       <aside class="sidebar" id="app-sidebar" aria-label="القائمة الرئيسية">
         <div class="brand">
           <h2 class="brand-title"><span class="brand-mark">N2</span><span class="brand-text">منصة NEWS2</span></h2>
           <p class="brand-subtitle">Karamix Labs Clinical Research</p>
-          <button class="icon-btn sidebar-close" aria-label="إغلاق القائمة" onclick="closeMobileNav()">×</button>
+          <button class="icon-btn sidebar-close" id="sidebarCloseButton" aria-label="إغلاق القائمة" onclick="closeSidebar()">×</button>
         </div>
         <nav class="nav-list" aria-label="التنقل الرئيسي">
           ${navGroups.map((group) => renderNavGroup(group, route.id)).join("")}
@@ -1156,6 +1203,7 @@ function renderShell(route) {
         <section class="content">${renderScreen(route)}</section>
       </main>
     </div>`;
+  applySidebarState();
 }
 
 function renderNavGroup(group, routeId) {
@@ -2692,7 +2740,7 @@ function renderStudyForm(study) {
 }
 
 function render() {
-  document.body.classList.toggle("nav-collapsed", appState.navCollapsed);
+  applySidebarState();
   const id = currentRoute();
   if (id === "login") {
     renderLogin();
@@ -2714,15 +2762,18 @@ window.clearResearchExportFilters = clearResearchExportFilters;
 window.downloadResearchExport = downloadResearchExport;
 window.submitStudyForm = submitStudyForm;
 window.changeDevRole = changeDevRole;
+window.openSidebar = openSidebar;
+window.closeSidebar = closeSidebar;
 window.toggleSidebar = toggleSidebar;
 window.toggleNavGroup = toggleNavGroup;
 window.closeMobileNav = closeMobileNav;
 window.addEventListener("hashchange", render);
 window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeMobileNav();
+  if (event.key === "Escape") closeSidebar();
 });
 window.addEventListener("resize", () => {
-  if (!window.matchMedia("(max-width: 1120px)").matches) closeMobileNav();
+  if (!isMobileNavMode()) document.body.classList.remove("nav-open");
+  applySidebarState();
 });
 loadHealth();
 loadRbacContext();
