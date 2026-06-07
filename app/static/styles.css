@@ -445,6 +445,24 @@ body.nav-collapsed .sidebar {
   overflow: hidden;
 }
 
+.kpi-action {
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.kpi-action:hover,
+.kpi-action:focus {
+  border-color: rgba(14, 165, 233, 0.5);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.12);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.kpi-action:focus-visible {
+  outline: 3px solid rgba(14, 165, 233, 0.28);
+  outline-offset: 2px;
+}
+
 .kpi::after {
   content: "";
   position: absolute;
@@ -666,6 +684,14 @@ body.nav-collapsed .sidebar {
 .profile-actions {
   justify-content: flex-start;
   margin-bottom: 12px;
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
 }
 
 table {

@@ -977,6 +977,12 @@ function setRoute(routeId) {
   closeMobileNav();
 }
 
+function handleActionKey(event, routeId) {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  setRoute(routeId);
+}
+
 function selectPatientProfile(patientId) {
   const normalizedId = Number(patientId);
   if (!Number.isInteger(normalizedId) || normalizedId <= 0) return;
@@ -1368,7 +1374,7 @@ function renderDashboard() {
   const summary = appState.researchSummary || {};
   const alerts = appState.alerts || [];
   const activeAlerts = alerts.filter((item) => !["closed", "cancelled"].includes(item.status)).length;
-  const highRiskAlerts = alerts.filter((item) => ["high", "critical"].includes(item.riskLevel) || ["high", "critical"].includes(item.severityLevel)).length;
+  const highRiskAlerts = applyAlertRouteFilter(alerts, { highRisk: true }).length;
   const mediumRiskAlerts = alerts.filter((item) => item.riskLevel === "medium" || item.severityLevel === "medium").length;
   const closedAlerts = alerts.filter((item) => item.status === "closed").length;
   const latestAlerts = alerts.slice(0, 5).map(alertRow);
@@ -1381,16 +1387,17 @@ function renderDashboard() {
       </div>
       <div class="status-panel">
         ${renderKpi(["حالة الخادم", appState.health?.connected ? "متصل" : "غير متصل", "فحص /health", appState.health?.connected ? "success" : "warning"])}
-        ${renderKpi(["تنبيهات عالية الخطورة", String(highRiskAlerts), "من بيانات التنبيهات", highRiskAlerts > 0 ? "danger" : "success"], highRiskAlerts > 0)}
+        ${renderActionKpi(["تنبيهات عالية الخطورة", String(highRiskAlerts), "من بيانات التنبيهات", highRiskAlerts > 0 ? "danger" : "success"], "active-alerts?risk_level=high", "عرض التنبيهات عالية الخطورة", highRiskAlerts > 0)}
       </div>
     </div>
     <div class="grid cols-4">
-      ${renderKpi(["إجمالي المرضى", summary.patientsCount ?? appState.patients.length, "من /api/patients", "info"])}
-      ${renderKpi(["التنبيهات النشطة", activeAlerts, "من /api/alerts", activeAlerts ? "warning" : "success"])}
+      ${renderActionKpi(["إجمالي المرضى", summary.patientsCount ?? appState.patients.length, "من /api/patients", "info"], "patients", "عرض قائمة المرضى")}
+      ${renderActionKpi(["التنبيهات النشطة", activeAlerts, "من /api/alerts", activeAlerts ? "warning" : "success"], "active-alerts", "عرض التنبيهات النشطة")}
       ${renderKpi(["تنبيهات متوسطة", mediumRiskAlerts, "فرز سريري", mediumRiskAlerts ? "warning" : "success"])}
       ${renderKpi(["تنبيهات مغلقة", closedAlerts, "مكتملة", "success"])}
-      ${renderKpi(["أحداث التدهور", summary.deteriorationEventsCount ?? 0, "من /api/deterioration/events", (summary.deteriorationEventsCount || 0) ? "warning" : "success"])}
-      ${renderKpi(["الاستجابات المسجلة", summary.clinicalResponsesCount ?? 0, `متوسط البدء ${summary.averageResponseDelayMinutes ?? "-"} د`, "info"])}
+      ${renderActionKpi(["أحداث التدهور", summary.deteriorationEventsCount ?? 0, "من /api/deterioration/events", (summary.deteriorationEventsCount || 0) ? "warning" : "success"], "deterioration-events", "عرض أحداث التدهور")}
+      ${renderActionKpi(["الاستجابات المسجلة", summary.clinicalResponsesCount ?? 0, `متوسط البدء ${summary.averageResponseDelayMinutes ?? "-"} د`, "info"], "medical-response-log", "عرض الاستجابات المسجلة")}
+      ${renderActionKpi(["المآلات", summary.outcomesCount ?? 0, "من /api/outcomes", (summary.outcomesCount || 0) ? "info" : "success"], "clinical-outcomes", "عرض المآلات السريرية")}
     </div>
     <div class="grid cols-2" style="margin-top:16px">
       ${card("منحنى NEWS2 اليوم", renderLineChart("اتجاه NEWS2 تجريبي لحين توفير endpoint للاتجاهات"))}
@@ -1487,9 +1494,16 @@ function renderAlerts() {
   if (appState.loading.alerts) return tableSkeleton("جاري تحميل التنبيهات...");
   if (appState.errors.alerts) return errorBlock("alerts");
   if (!appState.alerts.length) return emptyBlock("لا توجد تنبيهات نشطة");
-  const high = appState.alerts.filter((item) => item.riskLevel === "high" || item.severityLevel === "high" || item.riskLevel === "critical" || item.severityLevel === "critical").length;
+  const alertFilter = currentAlertFilter();
+  const visibleAlerts = applyAlertRouteFilter(appState.alerts, alertFilter);
+  const high = applyAlertRouteFilter(appState.alerts, { highRisk: true }).length;
   const medium = appState.alerts.filter((item) => item.riskLevel === "medium" || item.severityLevel === "medium").length;
+  const filterPanel = alertFilter.highRisk ? `<div class="filter-bar"><span class="badge danger">عرض التنبيهات عالية الخطورة</span><button class="btn" type="button" onclick="setRoute('active-alerts')">عرض كل التنبيهات</button></div>` : "";
+  const alertsTable = visibleAlerts.length
+    ? renderTable(["المعرف", "رمز المريض", "مستوى الخطر", "الشدة", "الأولوية", "الحالة", "وقت الإنشاء", "سبب التنبيه"], visibleAlerts.map(alertFullRow))
+    : emptyBlock(alertFilter.highRisk ? "لا توجد تنبيهات عالية الخطورة حالياً" : "لا توجد تنبيهات نشطة");
   return `
+    ${filterPanel}
     <div class="grid cols-3">
       ${renderKpi(["عالية الخطورة", high, "تحتاج تصعيد", high ? "danger" : "success"], high > 0)}
       ${renderKpi(["إجمالي التنبيهات", appState.alerts.length, "من قاعدة البيانات", "info"])}
@@ -1499,7 +1513,24 @@ function renderAlerts() {
       ${card("فتح سجل تدهور سريري", renderDeteriorationEventForm())}
       ${card("نتيجة فتح السجل", renderDeteriorationSubmission())}
     </div>
-    <div style="margin-top:16px">${card("التنبيهات النشطة", renderTable(["المعرف", "رمز المريض", "مستوى الخطر", "الشدة", "الأولوية", "الحالة", "وقت الإنشاء", "سبب التنبيه"], appState.alerts.map(alertFullRow)))}</div>`;
+    <div style="margin-top:16px">${card(alertFilter.highRisk ? "التنبيهات عالية الخطورة" : "التنبيهات النشطة", alertsTable)}</div>`;
+}
+
+function currentAlertFilter() {
+  const params = parseCurrentRoute().params;
+  const highRisk = params.get("risk_level") === "high" || params.get("severity_level") === "high" || ["urgent", "immediate"].includes(params.get("priority"));
+  return { highRisk };
+}
+
+function applyAlertRouteFilter(alerts, filter) {
+  if (!filter.highRisk) return alerts;
+  const activeStatuses = new Set(["new", "viewed", "acknowledged", "in_progress"]);
+  return alerts.filter((alert) => {
+    const active = activeStatuses.has(alert.status);
+    const risky = ["high", "critical"].includes(alert.riskLevel) || ["high", "critical"].includes(alert.severityLevel);
+    const urgent = ["urgent", "immediate"].includes(alert.priority);
+    return active && (risky || urgent);
+  });
 }
 
 function renderDeteriorationEventForm() {
@@ -1573,6 +1604,11 @@ function alertFullRow(alert) {
 function renderKpi(item, critical = false) {
   const [labelText, value, meta, tone] = item;
   return `<div class="card kpi ${critical ? "critical" : ""}"><div class="card-body"><div class="kpi-label">${escapeHtml(labelText)}</div><div class="kpi-value">${escapeHtml(value)}</div><div class="kpi-meta">${badge(meta, tone, critical)}</div></div></div>`;
+}
+
+function renderActionKpi(item, routeId, ariaLabel, critical = false) {
+  const [labelText, value, meta, tone] = item;
+  return `<div class="card kpi kpi-action ${critical ? "critical" : ""}" role="button" tabindex="0" aria-label="${escapeHtml(ariaLabel || labelText)}" onclick="setRoute('${escapeHtml(routeId)}')" onkeydown="handleActionKey(event, '${escapeHtml(routeId)}')"><div class="card-body"><div class="kpi-label">${escapeHtml(labelText)}</div><div class="kpi-value">${escapeHtml(value)}</div><div class="kpi-meta">${badge(meta, tone, critical)}</div></div></div>`;
 }
 
 function renderStaticTable(route) {
@@ -2895,6 +2931,7 @@ window.clearResearchExportFilters = clearResearchExportFilters;
 window.downloadResearchExport = downloadResearchExport;
 window.submitStudyForm = submitStudyForm;
 window.changeDevRole = changeDevRole;
+window.handleActionKey = handleActionKey;
 window.selectPatientProfile = selectPatientProfile;
 window.showPatientProfileSelector = showPatientProfileSelector;
 window.filterPatientProfileSelector = filterPatientProfileSelector;
