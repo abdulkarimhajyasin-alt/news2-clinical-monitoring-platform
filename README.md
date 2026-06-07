@@ -32,7 +32,20 @@ On application startup the platform also runs safe database initialization:
 - missing tables are created with SQLAlchemy `create_all`
 - existing tables are not dropped or reset
 - demo seed data is inserted only when users/patients are empty
+- an initial admin account is ensured when no admin exists (`admin` / `Admin@12345`)
 - `NEWS2_AUTO_SEED=false` disables automatic seeding but not table creation
+
+## Authentication
+
+Phase 16 uses real username/password login with HTTP-only cookie sessions. Set `NEWS2_SESSION_SECRET` in production.
+
+Key security settings:
+
+- `NEWS2_SESSION_SECRET`
+- `NEWS2_SESSION_COOKIE_NAME=news2_session`
+- `NEWS2_SESSION_MAX_AGE_SECONDS=86400`
+- `NEWS2_COOKIE_SECURE=false` for local HTTP, `true` behind HTTPS
+- `NEWS2_ALLOW_DEV_ROLE=false` by default; set `true` only for local/test role impersonation
 
 ## Run Locally
 
@@ -70,9 +83,11 @@ Phase 12 adds the Research Analytics Dashboard. It provides descriptive KPIs, NE
 
 Phase 13 adds the Study Management & Research Protocol Center. It manages `research_studies`, protocol configuration, study timeline visibility, readiness scoring, and audit logs for study creation, updates, and readiness review.
 
-Phase 14 adds the RBAC foundation. It centralizes role permissions, exposes `/api/rbac/me` and `/api/rbac/permissions`, protects sensitive exports, analytics, study management, clinical writes, and alert lifecycle actions, and adds a temporary `X-Dev-Role` development context until Phase 16 authentication.
+Phase 14 adds the RBAC foundation. It centralizes role permissions, exposes `/api/rbac/me` and `/api/rbac/permissions`, and protects sensitive exports, analytics, study management, clinical writes, and alert lifecycle actions.
 
-Phase 15 adds enterprise user management and RBAC hardening. It introduces the `technical_admin` role, staff creation/list/update/status APIs under `/api/users`, hashed temporary password storage, and Administration navigation visibility for admin/technical-admin permissions. This is not full authentication; Phase 16 must add real login, sessions/JWT, logout, and password verification.
+Phase 15 adds enterprise user management and RBAC hardening. It introduces the `technical_admin` role, staff creation/list/update/status APIs under `/api/users`, hashed temporary password storage, and Administration navigation visibility for admin/technical-admin permissions.
+
+Phase 16 adds authentication and session security. It verifies stored password hashes, creates HTTP-only cookie sessions, supports logout and `/api/auth/me`, resolves RBAC from the authenticated user's database role, protects clinical/research read endpoints, and disables public role switching by default.
 
 The patient creation workflow is now connected to the backend. The Add Patient screen posts to `POST /api/patients`, persists the patient in SQLite/PostgreSQL, refreshes the patient list, and uses RBAC `patients:create`.
 
@@ -95,6 +110,7 @@ Screens now using real database-backed data:
 - Research Dataset & Exports: `/api/research/dataset`, `/api/research/dataset/quality`, `/api/research/export/csv`, `/api/research/export/xlsx`, `/api/research/export/spss-codebook`, `/api/research/export/spss-variable-labels`
 - Research Analytics: `/api/research/analytics/summary`, `/api/research/analytics/news2-distribution`, `/api/research/analytics/outcomes`, `/api/research/analytics/response-times`, `/api/research/analytics/deterioration`, `/api/research/analytics/group-comparison`
 - Study Management: `/api/studies`, `/api/studies/{study_id}`, `/api/studies/{study_id}/readiness`
+- Authentication: `/api/auth/login`, `/api/auth/me`, `/api/auth/logout`
 - RBAC: `/api/rbac/me`, `/api/rbac/permissions`
 - User Management: `/api/users`, `/api/users/{id}`, `/api/users/{id}/status`
 

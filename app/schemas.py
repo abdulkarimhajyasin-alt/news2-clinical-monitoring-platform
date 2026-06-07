@@ -110,6 +110,28 @@ class StaffUserCreateResult(BaseModel):
     message: str
 
 
+class AuthLoginRequest(BaseModel):
+    username_or_email: str = Field(min_length=2, max_length=255)
+    password: str = Field(min_length=8, max_length=256)
+
+    @field_validator("username_or_email")
+    @classmethod
+    def normalize_identifier(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class AuthenticatedUserRead(BaseModel):
+    id: int | None = None
+    full_name: str | None = None
+    username: str | None = None
+    email: str | None = None
+    role: str
+    role_label: str
+    permissions: list[str]
+    is_dev_context: bool = False
+    allow_dev_role: bool = False
+
+
 class PatientRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

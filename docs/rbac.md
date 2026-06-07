@@ -1,6 +1,6 @@
 # Role Based Access Control Foundation
 
-Phase 14 added centralized RBAC for the NEWS2 Hemodialysis Monitoring Platform. Phase 15 hardens it with enterprise staff management and the `technical_admin` role.
+Phase 14 added centralized RBAC for the NEWS2 Hemodialysis Monitoring Platform. Phase 15 hardened it with enterprise staff management and the `technical_admin` role. Phase 16 resolves RBAC from authenticated user sessions.
 
 ## Roles
 
@@ -30,21 +30,21 @@ Permissions use stable `resource:action` strings such as:
 
 The permission matrix is centralized in `app/rbac.py`.
 
-## Development User Context
+## Authenticated User Context
 
-Until Phase 16 authentication is implemented, the backend reads a temporary development role from:
+The backend reads the current user from the HTTP-only `news2_session` cookie and derives permissions from the user's stored database role.
+
+For local development and automated tests only, `X-Dev-Role` can be enabled with:
 
 ```text
-X-Dev-Role
+NEWS2_ALLOW_DEV_ROLE=true
 ```
 
-If the header is absent, the role defaults to `admin` for local/demo continuity. Invalid roles return `400 Bad Request`.
-
-This is not production authentication.
+When `NEWS2_ALLOW_DEV_ROLE=false` or unset, `X-Dev-Role` is ignored and unauthenticated requests receive `401`.
 
 ## RBAC API
 
-- `GET /api/rbac/me`: returns the current development role and permissions.
+- `GET /api/rbac/me`: returns the current authenticated user role and permissions.
 - `GET /api/rbac/permissions`: returns the full role and permission matrix. Requires `rbac:view`.
 - `/api/users`: staff user management endpoints. Require `users:view`, `users:create`, `users:update`, or `users:disable`.
 
@@ -64,6 +64,7 @@ Study management:
 
 Clinical writes:
 
+- Clinical/research reads such as patients, alerts, monitoring history, NEWS2 assessments, deterioration events, responses, outcomes, and research summary require the matching `*:view` permission.
 - `POST /api/monitoring/measurements` requires `measurements:create`.
 - `POST /api/deterioration/events` requires `deterioration:create`.
 - `POST /api/responses` requires `responses:create`.
@@ -72,7 +73,9 @@ Clinical writes:
 
 ## Frontend Behavior
 
-The frontend loads `/api/rbac/me`, stores the current role and permissions, and sends `X-Dev-Role` with API requests. A small development role switcher allows testing role behavior before full authentication.
+The frontend loads `/api/auth/me`, stores the authenticated user and permissions, and sends cookie-authenticated API requests. It does not store auth tokens in localStorage.
+
+A development role switcher is hidden unless the backend returns `allow_dev_role=true`.
 
 Restricted export buttons and study-management actions are hidden or disabled with Arabic messages.
 
@@ -80,8 +83,8 @@ The Administration navigation group is visible only to roles with administration
 
 ## Audit Logging
 
-Permission denials write a simple `permission_denied` audit log with role, permission, and path when the database is available.
+Permission denials write a simple `permission_denied` audit log with role, permission, and path when the database is available. Authentication writes `auth_login_success`, `auth_login_failed`, `auth_logout`, and `auth_unauthorized_access`.
 
 ## Limitations
 
-Phase 15 does not implement login, sessions, cookies, JWT, password reset, MFA, or production authentication. It stores hashed temporary passwords for staff accounts so Phase 16 can add real authentication safely.
+Phase 16 does not add password reset, MFA, SSO, device management, or institution-specific identity-provider integration.

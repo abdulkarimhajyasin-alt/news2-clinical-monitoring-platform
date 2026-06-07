@@ -113,6 +113,20 @@ class User(Base, TimestampMixin):
     created_sessions: Mapped[list["DialysisSession"]] = relationship(back_populates="created_by", foreign_keys="DialysisSession.created_by_user_id")
     recorded_measurements: Mapped[list["IntradialyticMeasurement"]] = relationship(back_populates="recorded_by", foreign_keys="IntradialyticMeasurement.recorded_by_user_id")
     audit_logs: Mapped[list["AuditLog"]] = relationship(back_populates="user")
+    auth_sessions: Mapped[list["AuthSession"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+
+
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User] = relationship(back_populates="auth_sessions")
 
 
 class Patient(Base, TimestampMixin, LockMixin):

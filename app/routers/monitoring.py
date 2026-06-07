@@ -21,6 +21,7 @@ def read_monitoring_measurements(
     dialysis_session_id: int | None = Query(default=None, gt=0),
     limit: int = Query(default=25, gt=0, le=200),
     db: Session = Depends(get_db),
+    _current_user=Depends(require_permission("measurements:view")),
 ):
     return list_recent_measurements(db, patient_id=patient_id, dialysis_session_id=dialysis_session_id, limit=limit)
 

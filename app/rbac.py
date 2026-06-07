@@ -6,8 +6,10 @@ from typing import Iterable
 from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.database import get_db
-from app.models import AuditLog
+from app.models import AuditLog, User
+from app.services.auth_service import get_current_user_from_request
 
 
 ROLE_ADMIN = "admin"
@@ -156,21 +158,64 @@ ROLE_PERMISSIONS = {
 
 
 @dataclass(frozen=True)
-class DevUser:
+class CurrentUserContext:
     role: str
     role_label: str
     permissions: list[str]
-    is_dev_context: bool = True
+    id: int | None = None
+    full_name: str | None = None
+    username: str | None = None
+    email: str | None = None
+    is_dev_context: bool = False
+    allow_dev_role: bool = False
 
 
-def get_current_dev_user(x_dev_role: str | None = Header(default=None, alias="X-Dev-Role")) -> DevUser:
+DevUser = CurrentUserContext
+
+
+def get_current_dev_user(x_dev_role: str | None = Header(default=None, alias="X-Dev-Role")) -> CurrentUserContext:
     role = (x_dev_role or ROLE_ADMIN).strip()
     if role not in ROLE_PERMISSIONS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid development role")
-    return DevUser(
+    return CurrentUserContext(
         role=role,
         role_label=ROLE_LABELS[role],
         permissions=sorted(ROLE_PERMISSIONS[role]),
+        full_name=ROLE_LABELS[role],
+        username="dev",
+        is_dev_context=True,
+        allow_dev_role=True,
+    )
+
+
+def get_current_user(
+    request: Request,
+    db: Session = Depends(get_db),
+    x_dev_role: str | None = Header(default=None, alias="X-Dev-Role"),
+) -> CurrentUserContext:
+    settings = get_settings()
+    if request.cookies.get(settings.session_cookie_name):
+        return user_context_from_model(get_current_user_from_request(db, request), allow_dev_role=settings.allow_dev_role)
+    if settings.allow_dev_role:
+        return get_current_dev_user(x_dev_role)
+    _audit_auth_unauthorized(db, request)
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+
+
+def user_context_from_model(user: User, *, allow_dev_role: bool = False) -> CurrentUserContext:
+    role = str(user.role)
+    if role not in ROLE_PERMISSIONS:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid user role")
+    return CurrentUserContext(
+        id=user.id,
+        full_name=user.full_name,
+        username=user.username,
+        email=user.email,
+        role=role,
+        role_label=ROLE_LABELS[role],
+        permissions=sorted(ROLE_PERMISSIONS[role]),
+        is_dev_context=False,
+        allow_dev_role=allow_dev_role,
     )
 
 
@@ -181,9 +226,9 @@ def role_has_permission(role: str, permission: str) -> bool:
 def require_permission(permission: str):
     def dependency(
         request: Request,
-        current_user: DevUser = Depends(get_current_dev_user),
+        current_user: CurrentUserContext = Depends(get_current_user),
         db: Session = Depends(get_db),
-    ) -> DevUser:
+    ) -> CurrentUserContext:
         if role_has_permission(current_user.role, permission):
             return current_user
         _audit_permission_denial(db, current_user.role, permission, request.url.path)
@@ -197,9 +242,9 @@ def require_any_permission(permissions: Iterable[str]):
 
     def dependency(
         request: Request,
-        current_user: DevUser = Depends(get_current_dev_user),
+        current_user: CurrentUserContext = Depends(get_current_user),
         db: Session = Depends(get_db),
-    ) -> DevUser:
+    ) -> CurrentUserContext:
         if any(role_has_permission(current_user.role, permission) for permission in permission_list):
             return current_user
         _audit_permission_denial(db, current_user.role, ",".join(permission_list), request.url.path)
@@ -219,7 +264,7 @@ def permission_matrix() -> dict[str, object]:
             for role, permissions in ROLE_PERMISSIONS.items()
         ],
         "permissions": sorted(PERMISSIONS),
-        "is_dev_context": True,
+        "is_dev_context": False,
     }
 
 
@@ -232,6 +277,22 @@ def _audit_permission_denial(db: Session, role: str, permission: str, path: str)
                 entity_id=permission,
                 old_value=role,
                 new_value=path,
+            )
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
+def _audit_auth_unauthorized(db: Session, request: Request) -> None:
+    try:
+        db.add(
+            AuditLog(
+                action="auth_unauthorized_access",
+                entity_type="auth",
+                entity_id=request.url.path,
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
             )
         )
         db.commit()

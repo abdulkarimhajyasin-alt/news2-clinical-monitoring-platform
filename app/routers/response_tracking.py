@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.rbac import require_permission
 from app.schemas import ResponseTrackingRead, ResponseTrackingResult, ResponseTrackingSummary
 from app.services.response_tracking_service import (
     ResponseTrackingAlertNotFoundError,
@@ -21,12 +22,13 @@ def read_response_tracking_summary(
     patient_id: int | None = Query(default=None, gt=0),
     dialysis_session_id: int | None = Query(default=None, gt=0),
     db: Session = Depends(get_db),
+    _current_user=Depends(require_permission("responses:view")),
 ):
     return get_response_tracking_summary(db, patient_id=patient_id, dialysis_session_id=dialysis_session_id)
 
 
 @router.post("/recalculate/{alert_id}", response_model=ResponseTrackingResult)
-def recalculate_response_tracking(alert_id: int, db: Session = Depends(get_db)):
+def recalculate_response_tracking(alert_id: int, db: Session = Depends(get_db), _current_user=Depends(require_permission("responses:create"))):
     try:
         return upsert_response_tracking_for_alert(
             db,
@@ -48,6 +50,7 @@ def read_response_tracking_records(
     clinical_deterioration_event_id: int | None = Query(default=None, gt=0),
     limit: int = Query(default=25, gt=0, le=200),
     db: Session = Depends(get_db),
+    _current_user=Depends(require_permission("responses:view")),
 ):
     return get_response_tracking_records(
         db,
@@ -60,7 +63,7 @@ def read_response_tracking_records(
 
 
 @router.get("/{tracking_id}", response_model=ResponseTrackingRead)
-def read_response_tracking_record(tracking_id: int, db: Session = Depends(get_db)):
+def read_response_tracking_record(tracking_id: int, db: Session = Depends(get_db), _current_user=Depends(require_permission("responses:view"))):
     try:
         return get_response_tracking_record(db, tracking_id)
     except ResponseTrackingNotFoundError as exc:

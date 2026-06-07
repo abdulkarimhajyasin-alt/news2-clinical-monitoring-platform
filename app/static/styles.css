@@ -294,6 +294,25 @@ body.nav-collapsed .sidebar {
   gap: 10px;
 }
 
+.current-user-badge {
+  min-height: 40px;
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.current-user-badge strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
 .dev-role-switcher {
   min-height: 40px;
   display: inline-flex;

@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
-from app.models import Patient, User
+from app.models import Patient, User, UserRole
 from app.seed import seed_database
+from app.security.passwords import hash_password
 
 
 logger = logging.getLogger("news2.startup")
@@ -71,6 +72,36 @@ def seed_database_if_empty(
         db.close()
 
 
+def ensure_initial_admin(
+    session_factory: Callable[[], Session] | sessionmaker[Session] = SessionLocal,
+) -> dict[str, object]:
+    db = session_factory()
+    try:
+        existing_admin = db.query(User).filter(User.role == UserRole.admin).first()
+        if existing_admin:
+            return {"status": "admin_exists", "admin_id": existing_admin.id}
+        admin = User(
+            full_name="System Administrator",
+            username="admin",
+            email="admin@example.local",
+            password_hash=hash_password("Admin@12345"),
+            role=UserRole.admin,
+            department="Information Technology",
+            job_title="Platform Administrator",
+            is_active=True,
+            status="active",
+            preferred_language="ar",
+        )
+        db.add(admin)
+        db.commit()
+        db.refresh(admin)
+        return {"status": "admin_created", "admin_id": admin.id}
+    finally:
+        db.close()
+
+
 def initialize_application_database() -> dict[str, object]:
     initialize_database()
-    return seed_database_if_empty()
+    seed_result = seed_database_if_empty()
+    admin_result = ensure_initial_admin()
+    return {"seed": seed_result, "admin": admin_result}

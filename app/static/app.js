@@ -223,7 +223,11 @@ const appState = {
   studyCenter: null,
   studySubmission: null,
   staffSubmission: null,
-  currentRole: localStorage.getItem("news2DevRole") || "admin",
+  currentUser: null,
+  isAuthenticated: false,
+  allowDevRole: false,
+  loginError: null,
+  currentRole: null,
   currentRoleLabel: "مدير النظام",
   permissions: [],
   permissionMatrix: null,
@@ -236,7 +240,9 @@ const appState = {
 const api = {
   async request(path, options = {}) {
     try {
-      const response = await fetch(path, { headers: { Accept: "application/json", "X-Dev-Role": appState.currentRole || "admin", ...(options.headers || {}) }, ...options });
+      const headers = { Accept: "application/json", ...(options.headers || {}) };
+      if (appState.allowDevRole && appState.currentRole) headers["X-Dev-Role"] = appState.currentRole;
+      const response = await fetch(path, { credentials: "include", ...options, headers });
       if (!response.ok) {
         let detail = `HTTP ${response.status}`;
         try {
@@ -244,6 +250,10 @@ const api = {
           detail = Array.isArray(payload.detail) ? "تأكد من صحة البيانات المدخلة" : payload.detail || detail;
         } catch (error) {
           detail = `HTTP ${response.status}`;
+        }
+        if (response.status === 401 && !path.startsWith("/api/auth/login") && !path.startsWith("/api/auth/me")) {
+          clearAuthState();
+          if (currentRoute() !== "login") setRoute("login");
         }
         throw new Error(detail);
       }
@@ -257,6 +267,19 @@ const api = {
   },
   getCurrentPermissionContext() {
     return this.request("/api/rbac/me").then(normalizePermissionContext);
+  },
+  getCurrentUser() {
+    return this.request("/api/auth/me").then(normalizePermissionContext);
+  },
+  login(payload) {
+    return this.request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(normalizePermissionContext);
+  },
+  logout() {
+    return this.request("/api/auth/logout", { method: "POST" });
   },
   getPermissionMatrix() {
     return this.request("/api/rbac/permissions").then(normalizePermissionMatrix);
@@ -426,10 +449,15 @@ function normalizeHealth(data) {
 
 function normalizePermissionContext(data) {
   return {
+    id: data?.id || null,
+    fullName: data?.full_name || null,
+    username: data?.username || null,
+    email: data?.email || null,
     role: data?.role || "admin",
     roleLabel: data?.role_label || "مدير النظام",
     permissions: data?.permissions || [],
-    isDevContext: data?.is_dev_context === true
+    isDevContext: data?.is_dev_context === true,
+    allowDevRole: data?.allow_dev_role === true
   };
 }
 
@@ -1101,6 +1129,7 @@ function emptyBlock(text) {
 }
 
 function renderDevRoleSwitcher() {
+  if (!appState.allowDevRole) return "";
   const roles = [
     ["admin", "مدير"],
     ["technical_admin", "تقني النظام"],
@@ -1114,6 +1143,12 @@ function renderDevRoleSwitcher() {
 
 function setLoading(key, value) {
   appState.loading[key] = value;
+}
+
+function renderCurrentUserBadge() {
+  const user = appState.currentUser || {};
+  const name = user.fullName || user.username || user.email || "Authenticated user";
+  return `<div class="current-user-badge"><span>${escapeHtml(name)}</span><strong>${escapeHtml(appState.currentRoleLabel || "")}</strong></div>`;
 }
 
 async function loadResource(key, loader) {
@@ -1141,21 +1176,38 @@ async function loadHealth() {
   render();
 }
 
-async function loadRbacContext() {
+function clearAuthState() {
+  appState.currentUser = null;
+  appState.isAuthenticated = false;
+  appState.allowDevRole = false;
+  appState.currentRole = null;
+  appState.currentRoleLabel = "ظ…ط¯ظٹط± ط§ظ„ظ†ط¸ط§ظ…";
+  appState.permissions = [];
+  appState.permissionMatrix = null;
+}
+
+async function loadAuthContext() {
   try {
-    const context = await api.getCurrentPermissionContext();
+    const context = await api.getCurrentUser();
+    appState.currentUser = context;
+    appState.isAuthenticated = true;
+    appState.allowDevRole = context.allowDevRole === true;
     appState.currentRole = context.role;
     appState.currentRoleLabel = context.roleLabel;
     appState.permissions = context.permissions;
     appState.errors.rbac = null;
   } catch (error) {
-    appState.permissions = [];
+    clearAuthState();
     appState.errors.rbac = error.message;
+    render();
+    return;
   }
-  try {
-    appState.permissionMatrix = await api.getPermissionMatrix();
-  } catch (error) {
-    appState.errors.permissionMatrix = error.message;
+  if (hasPermission("rbac:view")) {
+    try {
+      appState.permissionMatrix = await api.getPermissionMatrix();
+    } catch (error) {
+      appState.errors.permissionMatrix = error.message;
+    }
   }
   render();
 }
@@ -1267,6 +1319,26 @@ function renderLogin() {
       </section>
       <section class="login-card">
         <h2>تسجيل الدخول</h2>
+        <p class="subtitle">أدخل اسم المستخدم أو البريد الإلكتروني وكلمة المرور للوصول إلى المنصة.</p>
+        <form onsubmit="submitLogin(event)">
+          <div class="field"><label>اسم المستخدم أو البريد الإلكتروني</label><input name="username_or_email" autocomplete="username" required></div>
+          <div class="field" style="margin-top:14px"><label>كلمة المرور</label><input name="password" type="password" autocomplete="current-password" required minlength="8"></div>
+          ${appState.loginError ? `<div class="state-message error" role="alert"><strong>${escapeHtml(appState.loginError)}</strong></div>` : ""}
+          <div class="footer-actions">
+            <button class="btn primary" type="submit">دخول المنصة</button>
+          </div>
+        </form>
+      </section>
+    </main>`;
+  return;
+  app.innerHTML = `
+    <main class="auth-page">
+      <section class="auth-panel">
+        <h1>NEWS2 Hemodialysis Monitoring</h1>
+        <p>منصة رصد سريرية وبحثية للكشف المبكر عن التدهور لدى مرضى الغسيل الكلوي باستخدام NEWS2.</p>
+      </section>
+      <section class="login-card">
+        <h2>تسجيل الدخول</h2>
         <p class="subtitle">دخول تجريبي للواجهة. المصادقة الحقيقية ليست ضمن هذه المرحلة.</p>
         <div class="field"><label>البريد الإلكتروني</label><input type="email" value="clinician@karamixlabs.local"></div>
         <div class="field" style="margin-top:14px"><label>كلمة المرور</label><input type="password" value="password"></div>
@@ -1308,10 +1380,10 @@ function renderShell(route) {
           </div>
           <div class="top-actions">
             ${healthBadge()}
-            ${renderDevRoleSwitcher()}
+            ${renderCurrentUserBadge()}${renderDevRoleSwitcher()}
             ${badge("RTL", "info")}
             <button class="icon-btn" aria-label="عرض التنبيهات" title="التنبيهات" onclick="setRoute('active-alerts')">!</button>
-            <button class="btn" onclick="setRoute('login')">خروج</button>
+            <button class="btn" onclick="logout()">خروج</button>
           </div>
         </header>
         <section class="content">${renderScreen(route)}</section>
@@ -1377,10 +1449,10 @@ function renderShellLegacy(route) {
           </div>
           <div class="top-actions">
             ${healthBadge()}
-            ${renderDevRoleSwitcher()}
+            ${renderCurrentUserBadge()}${renderDevRoleSwitcher()}
             ${badge("RTL", "info")}
             <button class="icon-btn" aria-label="عرض التنبيهات" title="التنبيهات" onclick="setRoute('active-alerts')">!</button>
-            <button class="btn" onclick="setRoute('login')">خروج</button>
+            <button class="btn" onclick="logout()">خروج</button>
           </div>
         </header>
         <section class="content">${renderScreen(route)}</section>
@@ -3017,7 +3089,7 @@ function renderPermissions() {
     permission,
     ...roles.map((role) => (role.permissions || []).includes(permission) ? badge("مسموح", "success") : badge("ممنوع", "warning"))
   ]);
-  return `<div class="grid cols-2">${renderKpi(["الدور الحالي", appState.currentRoleLabel, "X-Dev-Role", "info"])}${renderKpi(["عدد الصلاحيات", appState.permissions.length, "Current permissions", "info"])}</div><div style="margin-top:16px">${card("مصفوفة الصلاحيات", rows.length ? renderTable(headers, rows) : emptyBlock("لم يتم تحميل مصفوفة الصلاحيات"))}</div>`;
+  return `<div class="grid cols-2">${renderKpi(["الدور الحالي", appState.currentRoleLabel, "Session RBAC", "info"])}${renderKpi(["عدد الصلاحيات", appState.permissions.length, "Current permissions", "info"])}</div><div style="margin-top:16px">${card("مصفوفة الصلاحيات", rows.length ? renderTable(headers, rows) : emptyBlock("لم يتم تحميل مصفوفة الصلاحيات"))}</div>`;
 }
 
 function renderRolesMatrix() {
@@ -3042,6 +3114,7 @@ function permissionGroupSummary(permissions) {
 }
 
 async function changeDevRole(role) {
+  if (!appState.allowDevRole) return;
   appState.currentRole = role;
   localStorage.setItem("news2DevRole", role);
   appState.researchDatasetRows = [];
@@ -3049,9 +3122,47 @@ async function changeDevRole(role) {
   appState.researchAnalyticsSummary = null;
   appState.studyCenter = null;
   appState.studyReadiness = null;
-  await loadRbacContext();
+  await loadAuthContext();
   const route = routes.find((item) => item.id === currentRoute());
   if (route) ensureDataForRoute(route);
+}
+
+async function submitLogin(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const payload = Object.fromEntries(new FormData(form).entries());
+  appState.loginError = null;
+  try {
+    const context = await api.login(payload);
+    appState.currentUser = context;
+    appState.isAuthenticated = true;
+    appState.allowDevRole = context.allowDevRole === true;
+    appState.currentRole = context.role;
+    appState.currentRoleLabel = context.roleLabel;
+    appState.permissions = context.permissions;
+    if (hasPermission("rbac:view")) {
+      try {
+        appState.permissionMatrix = await api.getPermissionMatrix();
+      } catch (error) {
+        appState.errors.permissionMatrix = error.message;
+      }
+    }
+    setRoute("dashboard");
+  } catch (error) {
+    appState.loginError = error.message || "تعذر تسجيل الدخول";
+    clearAuthState();
+    renderLogin();
+  }
+}
+
+async function logout() {
+  try {
+    await api.logout();
+  } catch (error) {
+    appState.errors.auth = error.message;
+  }
+  clearAuthState();
+  setRoute("login");
 }
 
 function renderStudyForm(study) {
@@ -3085,6 +3196,11 @@ function render() {
   const id = routeState.id;
   appState.selectedPatientId = id === "patient-profile" ? selectedPatientIdFromRoute(routeState.params) : appState.selectedPatientId;
   if (id === "login") {
+    if (appState.isAuthenticated) setRoute("dashboard");
+    else renderLogin();
+    return;
+  }
+  if (!appState.isAuthenticated) {
     renderLogin();
     return;
   }
@@ -3105,6 +3221,8 @@ window.submitResearchExportFilters = submitResearchExportFilters;
 window.clearResearchExportFilters = clearResearchExportFilters;
 window.downloadResearchExport = downloadResearchExport;
 window.submitStudyForm = submitStudyForm;
+window.submitLogin = submitLogin;
+window.logout = logout;
 window.changeDevRole = changeDevRole;
 window.handleActionKey = handleActionKey;
 window.selectPatientProfile = selectPatientProfile;
@@ -3124,5 +3242,5 @@ window.addEventListener("resize", () => {
   applySidebarState();
 });
 loadHealth();
-loadRbacContext();
+loadAuthContext();
 render();

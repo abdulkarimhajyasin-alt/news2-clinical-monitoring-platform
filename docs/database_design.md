@@ -5,6 +5,7 @@ The schema uses English table and field names with SQLAlchemy models. Arabic dis
 Core tables:
 
 - `users`: staff identity, role, department, language preference, status, timestamps.
+- `auth_sessions`: hashed HTTP-only cookie session tokens, owning user, expiration, and last-seen timestamps.
 - `patients`: anonymized patient baseline and study grouping.
 - `patient_vascular_access`: access type, location, insertion date, notes.
 - `dialysis_sessions`: session timing, prescription/operational settings, status.

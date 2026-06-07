@@ -37,6 +37,7 @@ def read_deterioration_events(
     deterioration_type: str | None = None,
     limit: int = Query(default=25, gt=0, le=200),
     db: Session = Depends(get_db),
+    _current_user=Depends(require_permission("deterioration:view")),
 ):
     return get_deterioration_events(
         db,
@@ -49,7 +50,7 @@ def read_deterioration_events(
 
 
 @router.get("/events/{event_id}", response_model=ClinicalDeteriorationEventRead)
-def read_deterioration_event(event_id: int, db: Session = Depends(get_db)):
+def read_deterioration_event(event_id: int, db: Session = Depends(get_db), _current_user=Depends(require_permission("deterioration:view"))):
     try:
         return get_deterioration_event(db, event_id)
     except DeteriorationEventNotFoundError as exc:

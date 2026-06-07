@@ -29,6 +29,7 @@ from app.models import (
     UserRole,
 )
 from app.schemas import NEWS2CalculationRequest
+from app.security.passwords import hash_password
 from app.services.news2_service import calculate_news2
 
 
@@ -46,11 +47,11 @@ def seed_database(db: Session, *, ensure_schema: bool = True) -> dict[str, int |
     now = datetime.now(timezone.utc).replace(microsecond=0)
 
     users = [
-        User(full_name="د. باحث سريري 01", username="admin", email="admin@example.local", password_hash="not-for-auth-phase", role=UserRole.admin, department="Research", job_title="Platform Administrator", phone="+0000000001", is_active=True),
-        User(full_name="د. طبيب كلى 01", username="doctor", email="doctor@example.local", password_hash="not-for-auth-phase", role=UserRole.doctor, department="Nephrology", job_title="Nephrologist", phone="+0000000002", is_active=True),
-        User(full_name="تمريض غسيل 01", username="nurse", email="nurse@example.local", password_hash="not-for-auth-phase", role=UserRole.nurse, department="Dialysis Unit", job_title="Dialysis Nurse", phone="+0000000003", is_active=True),
-        User(full_name="باحث بيانات 01", username="researcher", email="researcher@example.local", password_hash="not-for-auth-phase", role=UserRole.researcher, department="Clinical Research", job_title="Clinical Researcher", phone="+0000000004", is_active=True),
-        User(full_name="تقني النظام 01", username="techadmin", email="technical.admin@example.local", password_hash="not-for-auth-phase", role=UserRole.technical_admin, department="Information Technology", job_title="System Technical Admin", phone="+0000000005", is_active=True),
+        User(full_name="د. باحث سريري 01", username="admin", email="admin@example.local", password_hash=hash_password("Admin@12345"), role=UserRole.admin, department="Research", job_title="Platform Administrator", phone="+0000000001", is_active=True),
+        User(full_name="د. طبيب كلى 01", username="doctor", email="doctor@example.local", password_hash=hash_password("Doctor@12345"), role=UserRole.doctor, department="Nephrology", job_title="Nephrologist", phone="+0000000002", is_active=True),
+        User(full_name="تمريض غسيل 01", username="nurse", email="nurse@example.local", password_hash=hash_password("Nurse@12345"), role=UserRole.nurse, department="Dialysis Unit", job_title="Dialysis Nurse", phone="+0000000003", is_active=True),
+        User(full_name="باحث بيانات 01", username="researcher", email="researcher@example.local", password_hash=hash_password("Researcher@12345"), role=UserRole.researcher, department="Clinical Research", job_title="Clinical Researcher", phone="+0000000004", is_active=True),
+        User(full_name="تقني النظام 01", username="techadmin", email="technical.admin@example.local", password_hash=hash_password("Tech@12345"), role=UserRole.technical_admin, department="Information Technology", job_title="System Technical Admin", phone="+0000000005", is_active=True),
     ]
     db.add_all(users)
     db.flush()

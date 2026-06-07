@@ -34,9 +34,11 @@ The Phase 13 study management layer sits above the dataset and analytics layers.
 
 The Phase 14 RBAC layer centralizes role labels, permission strings, and the permission matrix in `app/rbac.py`. Sensitive research, study, alert-management, and clinical write endpoints depend on reusable permission checks.
 
-The Phase 15 enterprise user-management layer adds the `technical_admin` role, staff creation and activation APIs under `/api/users`, hashed temporary password storage, and Administration navigation visibility based on user/RBAC/audit/settings permissions. The temporary development resolver still reads `X-Dev-Role` and defaults to `admin`; Phase 16 must replace it with real authentication.
+The Phase 15 enterprise user-management layer adds the `technical_admin` role, staff creation and activation APIs under `/api/users`, hashed temporary password storage, and Administration navigation visibility based on user/RBAC/audit/settings permissions.
 
-Deployment startup initializes the database before requests are served. The startup helper creates missing tables with SQLAlchemy metadata, applies non-destructive user-management column hardening, never drops existing tables, and optionally seeds demo/research data only when the users/patients tables are empty.
+The Phase 16 authentication layer verifies stored password hashes, creates HTTP-only cookie sessions backed by the `auth_sessions` table, exposes login/current-user/logout APIs, and resolves RBAC from the authenticated user's stored role. `X-Dev-Role` is disabled by default and is available only when `NEWS2_ALLOW_DEV_ROLE=true` for local/test workflows.
+
+Deployment startup initializes the database before requests are served. The startup helper creates missing tables with SQLAlchemy metadata, applies non-destructive user-management column hardening, never drops existing tables, optionally seeds demo/research data only when the users/patients tables are empty, and ensures an initial admin account exists when no admin user is present.
 
 Later export phases should add governed dataset approvals, richer analysis outputs, and institution-specific review controls.
 

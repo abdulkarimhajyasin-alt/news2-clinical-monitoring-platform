@@ -36,6 +36,7 @@ def read_clinical_outcomes(
     outcome_window_hours: int | None = Query(default=None, ge=24, le=72),
     limit: int = Query(default=25, gt=0, le=200),
     db: Session = Depends(get_db),
+    _current_user=Depends(require_permission("outcomes:view")),
 ):
     return get_outcomes(
         db,
@@ -49,12 +50,12 @@ def read_clinical_outcomes(
 
 
 @router.get("/summary", response_model=ClinicalOutcomeSummary)
-def read_clinical_outcome_summary(db: Session = Depends(get_db)):
+def read_clinical_outcome_summary(db: Session = Depends(get_db), _current_user=Depends(require_permission("outcomes:view"))):
     return get_outcome_summary(db)
 
 
 @router.get("/{outcome_id}", response_model=ClinicalOutcomeRead)
-def read_clinical_outcome(outcome_id: int, db: Session = Depends(get_db)):
+def read_clinical_outcome(outcome_id: int, db: Session = Depends(get_db), _current_user=Depends(require_permission("outcomes:view"))):
     try:
         return get_outcome(db, outcome_id)
     except OutcomeNotFoundError as exc:

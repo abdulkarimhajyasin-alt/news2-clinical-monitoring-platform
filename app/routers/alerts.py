@@ -25,6 +25,7 @@ def read_alerts(
     patient_id: int | None = Query(default=None, gt=0),
     dialysis_session_id: int | None = Query(default=None, gt=0),
     db: Session = Depends(get_db),
+    _current_user=Depends(require_permission("alerts:view")),
 ):
     return list_alerts(
         db,
@@ -37,7 +38,7 @@ def read_alerts(
 
 
 @router.get("/{alert_id}", response_model=AlertRead)
-def read_alert(alert_id: int, db: Session = Depends(get_db)):
+def read_alert(alert_id: int, db: Session = Depends(get_db), _current_user=Depends(require_permission("alerts:view"))):
     try:
         return get_alert(db, alert_id)
     except AlertNotFoundError as exc:
@@ -45,7 +46,7 @@ def read_alert(alert_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{alert_id}/view", response_model=AlertRead)
-def mark_alert_viewed(alert_id: int, db: Session = Depends(get_db)):
+def mark_alert_viewed(alert_id: int, db: Session = Depends(get_db), _current_user=Depends(require_permission("alerts:view"))):
     return _run_alert_action(db, alert_id, view_alert)
 
 

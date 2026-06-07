@@ -1,12 +1,12 @@
 # Enterprise User Management
 
-Phase 15 adds staff user management and RBAC hardening without enabling production login.
+Phase 15 added staff user management and RBAC hardening. Phase 16 enables production login against those staff accounts.
 
 ## Scope
 
 Administrators and technical administrators can create staff accounts, assign platform roles, set department and job title metadata, and activate or deactivate users.
 
-This phase does not implement JWT, sessions, password reset, MFA, or external identity providers. Phase 16 must replace the temporary `X-Dev-Role` context with real authentication.
+Authentication now uses HTTP-only cookie sessions and stored password hashes. Password reset, MFA, and external identity providers remain out of scope.
 
 ## Staff Fields
 
@@ -43,7 +43,7 @@ API responses never include:
 - temporary password
 - password hash
 
-The temporary password is reserved for Phase 16 authentication and cannot be used to log in during Phase 15.
+The temporary password can be used for the user's first login after account creation. Operators should rotate temporary passwords through a future password-reset/change workflow before real deployment.
 
 ## Roles
 
@@ -55,7 +55,9 @@ Technical administrators can manage users, RBAC visibility, audit viewing, and s
 
 ## Frontend
 
-The Administration navigation group is visible only when the current role has administration permissions. In the development role switcher:
+The Administration navigation group is visible only when the authenticated role has administration permissions. The development role switcher is hidden unless `NEWS2_ALLOW_DEV_ROLE=true`.
+
+When the development role switcher is enabled:
 
 - `admin` sees Administration.
 - `technical_admin` sees Administration.

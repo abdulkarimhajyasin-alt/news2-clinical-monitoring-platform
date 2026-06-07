@@ -10,7 +10,7 @@ router = APIRouter(prefix="/api/patients", tags=["patients"])
 
 
 @router.get("", response_model=list[PatientRead])
-def read_patients(db: Session = Depends(get_db)):
+def read_patients(db: Session = Depends(get_db), _current_user=Depends(require_permission("patients:view"))):
     return list_patients(db)
 
 
