@@ -214,6 +214,8 @@ const appState = {
   researchAnalyticsSummary: null,
   studies: [],
   selectedStudyId: null,
+  selectedPatientId: null,
+  patientProfileSearch: "",
   studyReadiness: null,
   studyCenter: null,
   studySubmission: null,
@@ -422,12 +424,14 @@ function normalizePatient(row) {
   return {
     id: row.id,
     patientCode: row.patient_code || `P-${row.id}`,
+    fullName: row.full_name || "",
     age: row.age ?? "-",
     gender: row.gender || "unknown",
     studyPhase: row.study_phase || "unknown",
     studyGroup: row.study_group || "unknown",
     dialysisVintageMonths: row.dialysis_vintage_months ?? "-",
-    weeklySessionsCount: row.weekly_sessions_count ?? "-"
+    weeklySessionsCount: row.weekly_sessions_count ?? "-",
+    isAnonymized: row.is_anonymized === true
   };
 }
 
@@ -948,13 +952,61 @@ function closeMobileNav() {
   applySidebarState();
 }
 
+function parseCurrentRoute() {
+  const rawRoute = location.hash.replace(/^#\/?/, "") || "login";
+  const [pathPart, queryPart = ""] = rawRoute.split("?");
+  const pathSegments = pathPart.split("/").filter(Boolean);
+  const params = new URLSearchParams(queryPart);
+  if (pathSegments[0] === "patient-profile" && pathSegments[1] && !params.has("patient_id")) {
+    params.set("patient_id", pathSegments[1]);
+  }
+  return { id: pathSegments[0] || "login", params };
+}
+
 function currentRoute() {
-  return location.hash.replace("#/", "") || "login";
+  return parseCurrentRoute().id;
+}
+
+function selectedPatientIdFromRoute(params = parseCurrentRoute().params) {
+  const patientId = Number(params.get("patient_id"));
+  return Number.isInteger(patientId) && patientId > 0 ? patientId : null;
 }
 
 function setRoute(routeId) {
   location.hash = `/${routeId}`;
   closeMobileNav();
+}
+
+function selectPatientProfile(patientId) {
+  const normalizedId = Number(patientId);
+  if (!Number.isInteger(normalizedId) || normalizedId <= 0) return;
+  appState.selectedPatientId = normalizedId;
+  setRoute(`patient-profile?patient_id=${normalizedId}`);
+}
+
+function showPatientProfileSelector() {
+  appState.selectedPatientId = null;
+  appState.patientProfileSearch = "";
+  setRoute("patient-profile");
+}
+
+function changePatientProfileSearch(value) {
+  appState.patientProfileSearch = String(value || "");
+  render();
+}
+
+function filterPatientProfileSelector(value) {
+  appState.patientProfileSearch = String(value || "");
+  const query = appState.patientProfileSearch.trim().toLowerCase();
+  const rows = document.querySelectorAll("[data-patient-search-row]");
+  let visibleRows = 0;
+  rows.forEach((row) => {
+    const visible = !query || String(row.dataset.search || "").includes(query);
+    row.style.display = visible ? "" : "none";
+    if (visible) visibleRows += 1;
+  });
+  const emptyState = document.getElementById("patientSelectorEmpty");
+  if (emptyState) emptyState.style.display = visibleRows ? "none" : "";
 }
 
 function escapeHtml(value) {
@@ -1112,6 +1164,14 @@ function ensureDataForRoute(route) {
     if (!appState.dialysisSessions.length && !appState.loading.dialysisSessions) loadResource("dialysisSessions", api.getDialysisSessions.bind(api));
   }
   if (route.type === "patients" && !appState.patients.length && !appState.loading.patients) loadResource("patients", api.getPatients.bind(api));
+  if (route.type === "profile") {
+    if (!appState.patients.length && !appState.loading.patients) loadResource("patients", api.getPatients.bind(api));
+    if (!appState.dialysisSessions.length && !appState.loading.dialysisSessions) loadResource("dialysisSessions", api.getDialysisSessions.bind(api));
+    if (!appState.news2Assessments.length && !appState.loading.news2Assessments) loadResource("news2Assessments", api.getNews2Assessments.bind(api));
+    if (!appState.alerts.length && !appState.loading.alerts) loadResource("alerts", api.getAlerts.bind(api));
+    if (!appState.deteriorationEvents.length && !appState.loading.deteriorationEvents) loadResource("deteriorationEvents", api.getDeteriorationEvents.bind(api));
+    if (!appState.clinicalOutcomes.length && !appState.loading.clinicalOutcomes) loadResource("clinicalOutcomes", api.getClinicalOutcomes.bind(api));
+  }
   if (route.type === "sessions" && !appState.dialysisSessions.length && !appState.loading.dialysisSessions) loadResource("dialysisSessions", api.getDialysisSessions.bind(api));
   if (route.type === "alerts" && !appState.alerts.length && !appState.loading.alerts) loadResource("alerts", api.getAlerts.bind(api));
   if (route.type === "research" && !appState.researchSummary && !appState.loading.researchSummary) loadResource("researchSummary", api.getResearchSummary.bind(api));
@@ -1345,22 +1405,65 @@ function renderPatients() {
   if (appState.loading.patients) return tableSkeleton("جاري تحميل قائمة المرضى...");
   if (appState.errors.patients) return errorBlock("patients");
   if (!appState.patients.length) return emptyBlock("لا توجد بيانات مرضى حتى الآن");
-  const rows = appState.patients.map((patient) => [
-    patient.patientCode,
-    patient.age,
-    label(labels.gender, patient.gender),
-    label(labels.studyPhase, patient.studyPhase),
-    label(labels.studyGroup, patient.studyGroup),
-    patient.dialysisVintageMonths,
-    patient.weeklySessionsCount
-  ]);
   return `
     <div class="grid cols-3">
       ${renderKpi(["إجمالي المرضى", appState.patients.length, "بيانات قاعدة محلية", "info"])}
       ${renderKpi(["مرحلة التدخل", appState.patients.filter((p) => p.studyGroup === "intervention").length, "مجموعة الدراسة", "success"])}
       ${renderKpi(["متوسط الجلسات", "3/أسبوع", "من بيانات التهيئة", "info"])}
     </div>
-    <div style="margin-top:16px">${card("قائمة المرضى", renderTable(["رمز المريض", "العمر", "الجنس", "مرحلة الدراسة", "مجموعة الدراسة", "مدة الغسيل بالشهور", "جلسات أسبوعية"], rows))}</div>`;
+    <div style="margin-top:16px">${card("قائمة المرضى", renderPatientSelectionTable(appState.patients, { includeName: false, includeVintage: true }))}</div>`;
+}
+
+function patientSearchText(patient) {
+  return `${patient.patientCode || ""} ${patient.fullName || ""}`.toLowerCase();
+}
+
+function filteredProfilePatients() {
+  const query = appState.patientProfileSearch.trim().toLowerCase();
+  if (!query) return appState.patients;
+  return appState.patients.filter((patient) => patientSearchText(patient).includes(query));
+}
+
+function renderPatientSelectionTable(patients, options = {}) {
+  if (!patients.length) return emptyBlock("لا توجد بيانات مرضى حتى الآن");
+  const includeName = options.includeName === true;
+  const includeVintage = options.includeVintage === true;
+  const headers = [
+    "رمز المريض",
+    ...(includeName ? ["الاسم"] : []),
+    "العمر",
+    "الجنس",
+    "مرحلة الدراسة",
+    "مجموعة الدراسة",
+    ...(includeVintage ? ["مدة الغسيل بالشهور"] : []),
+    "جلسات أسبوعية"
+  ];
+  const rows = patients.map((patient) => `
+    <tr class="clickable-row" data-patient-search-row data-search="${escapeHtml(patientSearchText(patient))}" onclick="selectPatientProfile(${patient.id})">
+      <td><button class="table-link" type="button" onclick="event.stopPropagation(); selectPatientProfile(${patient.id})">${escapeHtml(patient.patientCode)}</button></td>
+      ${includeName ? `<td>${escapeHtml(patient.fullName || "-")}</td>` : ""}
+      <td>${escapeHtml(patient.age)}</td>
+      <td>${escapeHtml(label(labels.gender, patient.gender))}</td>
+      <td>${escapeHtml(label(labels.studyPhase, patient.studyPhase))}</td>
+      <td>${escapeHtml(label(labels.studyGroup, patient.studyGroup))}</td>
+      ${includeVintage ? `<td>${escapeHtml(patient.dialysisVintageMonths)}</td>` : ""}
+      <td>${escapeHtml(patient.weeklySessionsCount)}</td>
+    </tr>`).join("");
+  return `<div class="table-wrap patient-selector-table"><table><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function renderPatientProfileSelector() {
+  if (appState.loading.patients) return tableSkeleton("جاري تحميل قائمة المرضى...");
+  if (appState.errors.patients) return `<div class="state-message error" role="alert"><strong>تعذر تحميل قائمة المرضى</strong><span>${escapeHtml(appState.errors.patients)}</span></div>`;
+  if (!appState.patients.length) return emptyBlock("لا توجد بيانات مرضى حتى الآن");
+  const patients = filteredProfilePatients();
+  return card("اختر مريضاً لعرض الملف", `
+    <div class="patient-selector-toolbar">
+      <input type="search" value="${escapeHtml(appState.patientProfileSearch)}" placeholder="ابحث برمز المريض أو الاسم..." oninput="filterPatientProfileSelector(this.value)">
+    </div>
+    <div id="patientSelectorEmpty" class="state-message empty" style="${patients.length ? "display:none" : ""}"><strong>لا توجد نتائج مطابقة</strong></div>
+    ${patients.length ? renderPatientSelectionTable(patients, { includeName: true }) : ""}
+  `);
 }
 
 function renderSessions() {
@@ -1656,14 +1759,42 @@ function renderVitalSignsEntry() {
 }
 
 function renderProfile() {
-  const patient = appState.patients[0];
-  return `${card("ملخص المريض", `<div class="patient-summary">${[
-    ["الرمز", patient?.patientCode || "ANON-P-1001"],
-    ["العمر", patient?.age || "58"],
-    ["مرحلة الدراسة", patient ? label(labels.studyPhase, patient.studyPhase) : "بعد التطبيق"],
-    ["المجموعة", patient ? label(labels.studyGroup, patient.studyGroup) : "تدخل"]
-  ].map(([a, b]) => `<div class="summary-cell"><span>${a}</span><strong>${b}</strong></div>`).join("")}</div>`)}
-  <div class="grid cols-2" style="margin-top:16px">${card("اتجاه NEWS2", renderLineChart("اتجاه NEWS2 للمريض"))}${card("آخر الجلسات", renderTable(["المعرف", "المريض", "التاريخ", "الحالة"], appState.dialysisSessions.slice(0, 3).map((s) => [s.id, s.patientCode, s.sessionDate, label(labels.sessionStatus, s.sessionStatus)])))}</div>`;
+  if (!appState.selectedPatientId) return renderPatientProfileSelector();
+  if (appState.loading.patients && !appState.patients.length) return tableSkeleton("جاري تحميل قائمة المرضى...");
+  if (appState.errors.patients) return `<div class="state-message error" role="alert"><strong>تعذر تحميل قائمة المرضى</strong><span>${escapeHtml(appState.errors.patients)}</span></div>`;
+  const patient = appState.patients.find((item) => item.id === appState.selectedPatientId);
+  if (!patient) return `<div class="state-message warning"><strong>لم يتم العثور على المريض المحدد</strong><button class="btn" type="button" onclick="showPatientProfileSelector()">اختيار مريض آخر</button></div>`;
+
+  const patientSessions = appState.dialysisSessions.filter((session) => session.patientId === patient.id).slice(0, 5);
+  const patientAssessments = appState.news2Assessments.filter((assessment) => assessment.patientId === patient.id);
+  const patientAlerts = appState.alerts.filter((alert) => alert.patientId === patient.id).slice(0, 5);
+  const patientEvents = appState.deteriorationEvents.filter((event) => event.patientId === patient.id).slice(0, 5);
+  const patientOutcomes = appState.clinicalOutcomes.filter((outcome) => outcome.patientId === patient.id).slice(0, 5);
+  const news2Scores = patientAssessments.slice(-8).map((assessment) => assessment.totalScore ?? 0);
+
+  return `
+    <div class="footer-actions profile-actions">
+      <button class="btn" type="button" onclick="showPatientProfileSelector()">اختيار مريض آخر</button>
+    </div>
+    ${card("ملف المريض", `<div class="patient-summary">${[
+      ["رمز المريض", patient.patientCode],
+      ["الاسم", patient.fullName || "-"],
+      ["العمر", patient.age],
+      ["الجنس", label(labels.gender, patient.gender)],
+      ["مرحلة الدراسة", label(labels.studyPhase, patient.studyPhase)],
+      ["مجموعة الدراسة", label(labels.studyGroup, patient.studyGroup)],
+      ["مدة الغسيل بالشهور", patient.dialysisVintageMonths],
+      ["جلسات أسبوعية", patient.weeklySessionsCount]
+    ].map(([a, b]) => `<div class="summary-cell"><span>${escapeHtml(a)}</span><strong>${escapeHtml(b)}</strong></div>`).join("")}</div>`)}
+    <div class="grid cols-2" style="margin-top:16px">
+      ${card("اتجاه NEWS2", news2Scores.length ? renderBarChart(news2Scores) : emptyBlock("لا توجد قراءات NEWS2 لهذا المريض حتى الآن"))}
+      ${card("آخر الجلسات", patientSessions.length ? renderTable(["المعرف", "التاريخ", "الحالة"], patientSessions.map((session) => [session.id, session.sessionDate, label(labels.sessionStatus, session.sessionStatus)])) : emptyBlock("لا توجد جلسات غسيل لهذا المريض حتى الآن"))}
+    </div>
+    <div class="grid cols-3" style="margin-top:16px">
+      ${card("التنبيهات", patientAlerts.length ? renderTable(["المعرف", "الخطورة", "الحالة", "وقت الإنشاء"], patientAlerts.map((alert) => [alert.id, badge(riskLevelLabel(alert.riskLevel), riskTone(alert.riskLevel), alert.riskLevel === "high" || alert.riskLevel === "critical"), label(labels.status, alert.status), formatDateTime(alert.createdAt)])) : emptyBlock("لا توجد تنبيهات لهذا المريض حتى الآن"))}
+      ${card("أحداث التدهور", patientEvents.length ? renderTable(["المعرف", "NEWS2", "النوع", "الوقت"], patientEvents.map((event) => [event.id, event.news2TotalScore ?? event.triggeringNews2Score ?? "-", label(labels.deteriorationType, event.deteriorationType), formatDateTime(event.deteriorationTime)])) : emptyBlock("لا توجد أحداث تدهور لهذا المريض حتى الآن"))}
+      ${card("المآلات", patientOutcomes.length ? renderTable(["المعرف", "النوع", "الفترة", "وقت التسجيل"], patientOutcomes.map((outcome) => [outcome.id, label(labels.outcomeType, outcome.outcomeType), `${outcome.outcomeWindowHours} ساعة`, formatDateTime(outcome.outcomeRecordedAt || outcome.createdAt)])) : emptyBlock("لا توجد مآلات لهذا المريض حتى الآن"))}
+    </div>`;
 }
 
 function renderBaseline() {
@@ -2741,7 +2872,9 @@ function renderStudyForm(study) {
 
 function render() {
   applySidebarState();
-  const id = currentRoute();
+  const routeState = parseCurrentRoute();
+  const id = routeState.id;
+  appState.selectedPatientId = id === "patient-profile" ? selectedPatientIdFromRoute(routeState.params) : appState.selectedPatientId;
   if (id === "login") {
     renderLogin();
     return;
@@ -2762,6 +2895,9 @@ window.clearResearchExportFilters = clearResearchExportFilters;
 window.downloadResearchExport = downloadResearchExport;
 window.submitStudyForm = submitStudyForm;
 window.changeDevRole = changeDevRole;
+window.selectPatientProfile = selectPatientProfile;
+window.showPatientProfileSelector = showPatientProfileSelector;
+window.filterPatientProfileSelector = filterPatientProfileSelector;
 window.openSidebar = openSidebar;
 window.closeSidebar = closeSidebar;
 window.toggleSidebar = toggleSidebar;

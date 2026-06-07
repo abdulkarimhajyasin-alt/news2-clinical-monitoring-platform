@@ -632,6 +632,42 @@ body.nav-collapsed .sidebar {
   overflow-x: auto;
 }
 
+.patient-selector-toolbar {
+  margin-bottom: 14px;
+}
+
+.patient-selector-toolbar input {
+  width: min(100%, 420px);
+}
+
+.patient-selector-table .clickable-row {
+  cursor: pointer;
+}
+
+.patient-selector-table .clickable-row:hover {
+  background: #f1f5f9;
+}
+
+.table-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.table-link:hover,
+.table-link:focus {
+  text-decoration: underline;
+}
+
+.profile-actions {
+  justify-content: flex-start;
+  margin-bottom: 12px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
