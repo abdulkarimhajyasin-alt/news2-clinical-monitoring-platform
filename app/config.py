@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     session_max_age_seconds: int = 86400
     cookie_secure: bool = False
     allow_dev_role: bool = False
+    default_admin_username: str = "admin"
+    default_admin_password: str = "Admin@12345"
+    force_admin_password_reset: bool = False
 
     def resolved_session_secret(self) -> str:
         if self.session_secret:

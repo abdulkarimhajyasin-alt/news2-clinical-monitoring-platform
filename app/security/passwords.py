@@ -35,3 +35,20 @@ def verify_password(password: str, password_hash: str) -> bool:
         return hmac.compare_digest(actual, expected)
     except Exception:
         return False
+
+
+def is_password_hash_usable(password_hash: str | None) -> bool:
+    if not password_hash:
+        return False
+    try:
+        algorithm, iterations_text, salt_text, digest_text = password_hash.split("$", 3)
+        if algorithm != PBKDF2_ALGORITHM:
+            return False
+        iterations = int(iterations_text)
+        if iterations <= 0:
+            return False
+        salt = base64.b64decode(salt_text.encode("ascii"), validate=True)
+        digest = base64.b64decode(digest_text.encode("ascii"), validate=True)
+        return len(salt) >= SALT_BYTES and len(digest) == hashlib.sha256().digest_size
+    except Exception:
+        return False

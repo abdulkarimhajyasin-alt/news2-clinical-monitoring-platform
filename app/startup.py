@@ -11,7 +11,7 @@ from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.models import Patient, User, UserRole
 from app.seed import seed_database
-from app.security.passwords import hash_password
+from app.security.passwords import hash_password, is_password_hash_usable
 
 
 logger = logging.getLogger("news2.startup")
@@ -75,16 +75,54 @@ def seed_database_if_empty(
 def ensure_initial_admin(
     session_factory: Callable[[], Session] | sessionmaker[Session] = SessionLocal,
 ) -> dict[str, object]:
+    return ensure_default_admin_user(session_factory)
+
+
+def ensure_default_admin_user(
+    session_factory: Callable[[], Session] | sessionmaker[Session] = SessionLocal,
+) -> dict[str, object]:
+    settings = get_settings()
+    username = settings.default_admin_username.strip().lower()
+    default_password = settings.default_admin_password
+    if not username:
+        raise ValueError("NEWS2_DEFAULT_ADMIN_USERNAME must not be empty")
+    if not default_password:
+        raise ValueError("NEWS2_DEFAULT_ADMIN_PASSWORD must not be empty")
+
+    logger.info("Ensuring default admin user...")
     db = session_factory()
     try:
-        existing_admin = db.query(User).filter(User.role == UserRole.admin).first()
+        existing_admin = db.query(User).filter(User.username == username).first()
         if existing_admin:
-            return {"status": "admin_exists", "admin_id": existing_admin.id}
+            repaired_fields: list[str] = []
+            if existing_admin.role != UserRole.admin:
+                existing_admin.role = UserRole.admin
+                repaired_fields.append("role")
+            if not existing_admin.is_active:
+                existing_admin.is_active = True
+                repaired_fields.append("is_active")
+            if existing_admin.status != "active":
+                existing_admin.status = "active"
+                repaired_fields.append("status")
+            if settings.force_admin_password_reset or not is_password_hash_usable(existing_admin.password_hash):
+                existing_admin.password_hash = hash_password(default_password)
+                repaired_fields.append("password_hash")
+            if repaired_fields:
+                db.commit()
+                db.refresh(existing_admin)
+                logger.info("Default admin repaired for staging login.")
+                return {
+                    "status": "admin_repaired",
+                    "admin_id": existing_admin.id,
+                    "repaired_fields": repaired_fields,
+                }
+            logger.info("Default admin already usable.")
+            return {"status": "admin_usable", "admin_id": existing_admin.id}
         admin = User(
             full_name="System Administrator",
-            username="admin",
-            email="admin@example.local",
-            password_hash=hash_password("Admin@12345"),
+            username=username,
+            email=f"{username}@example.local",
+            password_hash=hash_password(default_password),
             role=UserRole.admin,
             department="Information Technology",
             job_title="Platform Administrator",
@@ -95,6 +133,7 @@ def ensure_initial_admin(
         db.add(admin)
         db.commit()
         db.refresh(admin)
+        logger.info("Default admin created.")
         return {"status": "admin_created", "admin_id": admin.id}
     finally:
         db.close()
