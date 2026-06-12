@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, or_, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -83,6 +83,7 @@ def ensure_default_admin_user(
 ) -> dict[str, object]:
     settings = get_settings()
     username = settings.default_admin_username.strip().lower()
+    admin_email = f"{username}@example.local"
     default_password = settings.default_admin_password
     if not username:
         raise ValueError("NEWS2_DEFAULT_ADMIN_USERNAME must not be empty")
@@ -92,9 +93,12 @@ def ensure_default_admin_user(
     logger.info("Ensuring default admin user...")
     db = session_factory()
     try:
-        existing_admin = db.query(User).filter(User.username == username).first()
+        existing_admin = db.query(User).filter(or_(User.username == username, User.email == admin_email)).first()
         if existing_admin:
             repaired_fields: list[str] = []
+            if existing_admin.username != username:
+                existing_admin.username = username
+                repaired_fields.append("username")
             if existing_admin.role != UserRole.admin:
                 existing_admin.role = UserRole.admin
                 repaired_fields.append("role")
@@ -121,7 +125,7 @@ def ensure_default_admin_user(
         admin = User(
             full_name="System Administrator",
             username=username,
-            email=f"{username}@example.local",
+            email=admin_email,
             password_hash=hash_password(default_password),
             role=UserRole.admin,
             department="Information Technology",

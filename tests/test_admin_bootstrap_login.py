@@ -73,6 +73,61 @@ def test_existing_admin_with_missing_password_hash_is_repaired(admin_bootstrap_c
         db.close()
 
 
+def test_existing_admin_username_is_repaired_without_duplicate(admin_bootstrap_context):
+    TestingSession, _client, _monkeypatch = admin_bootstrap_context
+    _add_user(TestingSession, email="legacy-admin@example.local", password_hash="legacy-placeholder")
+
+    result = ensure_default_admin_user(TestingSession)
+
+    db = TestingSession()
+    try:
+        admin = db.query(User).filter(User.username == "admin").one()
+        assert result["status"] == "admin_repaired"
+        assert admin.email == "legacy-admin@example.local"
+        assert verify_password("Admin@12345", admin.password_hash)
+        assert db.query(User).count() == 1
+    finally:
+        db.close()
+
+
+def test_existing_admin_email_is_repaired_without_duplicate(admin_bootstrap_context):
+    TestingSession, _client, _monkeypatch = admin_bootstrap_context
+    _add_user(TestingSession, username=None, email="admin@example.local", password_hash="legacy-placeholder")
+
+    result = ensure_default_admin_user(TestingSession)
+
+    db = TestingSession()
+    try:
+        admin = db.query(User).filter(User.email == "admin@example.local").one()
+        assert result["status"] == "admin_repaired"
+        assert admin.username == "admin"
+        assert admin.role == UserRole.admin
+        assert admin.is_active is True
+        assert verify_password("Admin@12345", admin.password_hash)
+        assert db.query(User).count() == 1
+    finally:
+        db.close()
+
+
+def test_repeated_startup_calls_do_not_create_duplicate_admin(admin_bootstrap_context):
+    TestingSession, _client, _monkeypatch = admin_bootstrap_context
+
+    first = ensure_default_admin_user(TestingSession)
+    second = ensure_default_admin_user(TestingSession)
+    third = ensure_default_admin_user(TestingSession)
+
+    db = TestingSession()
+    try:
+        assert first["status"] == "admin_created"
+        assert second["status"] == "admin_usable"
+        assert third["status"] == "admin_usable"
+        assert db.query(User).filter(User.username == "admin").count() == 1
+        assert db.query(User).filter(User.email == "admin@example.local").count() == 1
+        assert db.query(User).count() == 1
+    finally:
+        db.close()
+
+
 def test_existing_inactive_admin_is_activated(admin_bootstrap_context):
     TestingSession, _client, _monkeypatch = admin_bootstrap_context
     _add_user(TestingSession, is_active=False, status="inactive")
@@ -166,6 +221,8 @@ def test_password_hash_is_never_returned_after_bootstrap_login(admin_bootstrap_c
 def _add_user(
     TestingSession,
     *,
+    username: str | None = "admin",
+    email: str = "admin@example.local",
     password_hash: str | None = None,
     role: str = UserRole.admin,
     is_active: bool = True,
@@ -176,8 +233,8 @@ def _add_user(
         db.add(
             User(
                 full_name="Existing Admin",
-                username="admin",
-                email="admin@example.local",
+                username=username,
+                email=email,
                 password_hash=hash_password("Admin@12345") if password_hash is None else password_hash,
                 role=role,
                 is_active=is_active,
