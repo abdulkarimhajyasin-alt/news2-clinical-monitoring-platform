@@ -669,6 +669,28 @@ body.nav-collapsed .sidebar {
   overflow-x: auto;
 }
 
+.permission-groups {
+  display: grid;
+  gap: 7px;
+  min-width: 280px;
+  max-width: 620px;
+  white-space: normal;
+  line-height: 1.7;
+}
+
+.permission-group-line {
+  display: block;
+  padding: 6px 9px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: var(--text);
+}
+
+.permission-group-line strong {
+  color: var(--primary);
+}
+
 .patient-selector-toolbar {
   margin-bottom: 14px;
 }

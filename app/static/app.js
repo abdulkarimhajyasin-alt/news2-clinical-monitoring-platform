@@ -884,6 +884,34 @@ const labels = {
   }
 };
 
+const PERMISSION_RESOURCE_LABELS = {
+  patients: "المرضى",
+  sessions: "جلسات الغسيل",
+  measurements: "العلامات الحيوية",
+  news2: "تقييم NEWS2",
+  alerts: "التنبيهات",
+  deterioration: "أحداث التدهور",
+  responses: "الاستجابات",
+  outcomes: "المآلات السريرية",
+  research: "البحث",
+  studies: "الدراسة",
+  users: "المستخدمون",
+  staff: "الموظفون",
+  rbac: "الأدوار والصلاحيات",
+  audit: "سجلات التدقيق",
+  settings: "الإعدادات"
+};
+
+const PERMISSION_ACTION_LABELS = {
+  view: "عرض",
+  create: "إضافة",
+  update: "تعديل",
+  manage: "إدارة",
+  disable: "إيقاف",
+  analytics: "تحليلات",
+  export: "تصدير"
+};
+
 labels.studyStatus = {
   draft: "مسودة",
   active: "نشطة",
@@ -3086,7 +3114,7 @@ function renderPermissions() {
   const roles = matrix.roles || [];
   const headers = ["الصلاحية", ...roles.map((role) => role.role_label || role.role)];
   const rows = (matrix.permissions || []).map((permission) => [
-    permission,
+    permissionLabel(permission),
     ...roles.map((role) => (role.permissions || []).includes(permission) ? badge("مسموح", "success") : badge("ممنوع", "warning"))
   ]);
   return `<div class="grid cols-2">${renderKpi(["الدور الحالي", appState.currentRoleLabel, "Session RBAC", "info"])}${renderKpi(["عدد الصلاحيات", appState.permissions.length, "Current permissions", "info"])}</div><div style="margin-top:16px">${card("مصفوفة الصلاحيات", rows.length ? renderTable(headers, rows) : emptyBlock("لم يتم تحميل مصفوفة الصلاحيات"))}</div>`;
@@ -3095,22 +3123,45 @@ function renderPermissions() {
 function renderRolesMatrix() {
   const roles = appState.permissionMatrix?.roles || [];
   const rows = roles.map((role) => [
-    role.role,
     role.role_label,
     permissionGroupSummary(role.permissions || []),
     (role.permissions || []).length,
     role.role === appState.currentRole ? badge("الدور الحالي", "info") : "-"
   ]);
-  return card("الأدوار", rows.length ? renderTable(["الدور", "التسمية", "مجموعات الصلاحيات", "عدد الصلاحيات", "الحالة"], rows) : emptyBlock("لم يتم تحميل الأدوار بعد"));
+  return card("الأدوار", rows.length ? renderTable(["الدور", "مجموعات الصلاحيات", "عدد الصلاحيات", "الحالة"], rows) : emptyBlock("لم يتم تحميل الأدوار بعد"));
 }
 
 function permissionGroupSummary(permissions) {
   const groups = permissions.reduce((acc, permission) => {
-    const [group] = String(permission).split(":");
-    acc[group] = (acc[group] || 0) + 1;
+    const [resource, action = "view"] = String(permission).split(":");
+    if (!acc[resource]) acc[resource] = [];
+    acc[resource].push(action);
     return acc;
   }, {});
-  return Object.entries(groups).map(([group, count]) => `${group} (${count})`).join(", ");
+  const rows = Object.entries(groups).map(([resource, actions]) => {
+    const actionLabels = [...new Set(actions)].map(permissionActionLabel).join("، ");
+    return `<span class="permission-group-line"><strong>${escapeHtml(permissionResourceLabel(resource))}:</strong> ${escapeHtml(actionLabels)}</span>`;
+  });
+  return rows.length ? `<span class="permission-groups" dir="rtl">${rows.join("")}</span>` : "-";
+}
+
+function permissionLabel(permission) {
+  const [resource, action = "view"] = String(permission).split(":");
+  return `${permissionResourceLabel(resource)}: ${permissionActionLabel(action)}`;
+}
+
+function permissionResourceLabel(resource) {
+  const value = String(resource || "");
+  return PERMISSION_RESOURCE_LABELS[value] || readablePermissionFallback(value);
+}
+
+function permissionActionLabel(action) {
+  const value = String(action || "");
+  return PERMISSION_ACTION_LABELS[value] || readablePermissionFallback(value);
+}
+
+function readablePermissionFallback(value) {
+  return String(value || "-").replace(/_/g, " ");
 }
 
 async function changeDevRole(role) {
