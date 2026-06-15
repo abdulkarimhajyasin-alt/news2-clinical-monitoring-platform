@@ -23,6 +23,7 @@ def initialize_database(db_engine: Engine = engine) -> None:
     logger.info("Initializing database tables...")
     Base.metadata.create_all(bind=db_engine)
     ensure_user_management_columns(db_engine)
+    ensure_patient_lifecycle_columns(db_engine)
     logger.info("Database tables ready.")
 
 
@@ -41,6 +42,29 @@ def ensure_user_management_columns(db_engine: Engine = engine) -> None:
             if column_name not in existing_columns:
                 connection.execute(text(f"ALTER TABLE users ADD COLUMN {column_name} {sql_type}"))
         connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON users (username)"))
+
+
+def ensure_patient_lifecycle_columns(db_engine: Engine = engine) -> None:
+    inspector = inspect(db_engine)
+    if "patients" not in inspector.get_table_names():
+        return
+    existing_columns = {column["name"] for column in inspector.get_columns("patients")}
+    column_sql = {
+        "status": "VARCHAR(40) DEFAULT 'active' NOT NULL",
+        "discharged_at": "TIMESTAMP",
+        "discharge_reason": "VARCHAR(255)",
+        "discharge_notes": "TEXT",
+        "archived_at": "TIMESTAMP",
+        "archived_by_user_id": "INTEGER",
+        "deleted_at": "TIMESTAMP",
+        "deleted_by_user_id": "INTEGER",
+        "delete_reason": "TEXT",
+    }
+    with db_engine.begin() as connection:
+        for column_name, sql_type in column_sql.items():
+            if column_name not in existing_columns:
+                connection.execute(text(f"ALTER TABLE patients ADD COLUMN {column_name} {sql_type}"))
+        connection.execute(text("UPDATE patients SET status = 'active' WHERE status IS NULL OR status = ''"))
 
 
 def seed_database_if_empty(

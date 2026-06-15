@@ -16,6 +16,10 @@ Phase 14 added centralized RBAC for the NEWS2 Hemodialysis Monitoring Platform. 
 Permissions use stable `resource:action` strings such as:
 
 - `patients:view`
+- `patients:discharge`
+- `patients:archive`
+- `patients:restore`
+- `patients:delete`
 - `measurements:create`
 - `alerts:manage`
 - `research:export`
@@ -65,6 +69,7 @@ Study management:
 Clinical writes:
 
 - Clinical/research reads such as patients, alerts, monitoring history, NEWS2 assessments, deterioration events, responses, outcomes, and research summary require the matching `*:view` permission.
+- Patient lifecycle actions require `patients:discharge`, `patients:archive`, `patients:restore`, or `patients:delete`. Admin has all lifecycle permissions; technical admin can archive/restore; doctor can discharge/restore; nurse, on-call doctor, and researcher do not receive lifecycle write permissions by default.
 - `POST /api/monitoring/measurements` requires `measurements:create`.
 - `POST /api/deterioration/events` requires `deterioration:create`.
 - `POST /api/responses` requires `responses:create`.
@@ -84,6 +89,8 @@ The Administration navigation group is visible only to roles with administration
 ## Audit Logging
 
 Permission denials write a simple `permission_denied` audit log with role, permission, and path when the database is available. Authentication writes `auth_login_success`, `auth_login_failed`, `auth_logout`, and `auth_unauthorized_access`.
+
+Patient lifecycle actions write `patient_discharged`, `patient_archived`, `patient_restored`, and `patient_soft_deleted` audit logs with patient id, patient code, actor id when available, and reason.
 
 ## Limitations
 

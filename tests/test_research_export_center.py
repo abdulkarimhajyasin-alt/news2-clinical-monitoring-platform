@@ -322,3 +322,43 @@ def test_dataset_row_count_is_stable_with_seeded_data(export_client):
 
     assert len(first) == 2
     assert len(second) == 2
+
+
+def test_dataset_preserves_discharged_patients(export_client):
+    discharge_response = export_client.post(
+        "/api/patients/1/discharge",
+        headers={"X-Dev-Role": "doctor"},
+        json={"discharge_reason": "Completed dialysis monitoring"},
+    )
+
+    response = export_client.get("/api/research/dataset")
+
+    assert discharge_response.status_code == 200
+    assert response.status_code == 200
+    assert len(response.json()) == 2
+    assert {row["patient_code"] for row in response.json()} == {"EXP-P-1"}
+
+
+def test_dataset_preserves_archived_patients(export_client):
+    archive_response = export_client.post("/api/patients/1/archive", headers={"X-Dev-Role": "technical_admin"}, json={})
+
+    response = export_client.get("/api/research/dataset")
+
+    assert archive_response.status_code == 200
+    assert response.status_code == 200
+    assert len(response.json()) == 2
+    assert {row["patient_code"] for row in response.json()} == {"EXP-P-1"}
+
+
+def test_dataset_excludes_deleted_patients(export_client):
+    delete_response = export_client.post(
+        "/api/patients/1/delete",
+        headers={"X-Dev-Role": "admin"},
+        json={"delete_reason": "Duplicate test record", "confirmation_text": "DELETE PATIENT"},
+    )
+
+    response = export_client.get("/api/research/dataset")
+
+    assert delete_response.status_code == 200
+    assert response.status_code == 200
+    assert response.json() == []

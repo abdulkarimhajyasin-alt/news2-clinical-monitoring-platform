@@ -11,6 +11,7 @@ from app.services.monitoring_service import (
     create_measurement_with_news2,
     list_recent_measurements,
 )
+from app.services.patient_lifecycle_service import PatientLifecycleError
 
 router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
 
@@ -35,4 +36,6 @@ def create_monitoring_measurement(payload: MonitoringMeasurementCreate, db: Sess
     except DialysisSessionNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except SessionPatientMismatchError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except PatientLifecycleError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

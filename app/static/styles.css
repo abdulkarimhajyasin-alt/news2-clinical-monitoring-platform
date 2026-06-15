@@ -735,6 +735,48 @@ body.nav-collapsed .sidebar {
   margin-bottom: 14px;
 }
 
+.filter-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.filter-tab {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.filter-tab.active {
+  border-color: var(--primary);
+  background: var(--soft);
+  color: var(--primary);
+}
+
+.lifecycle-panel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.lifecycle-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lifecycle-form {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #f8fafc;
+}
+
 .table-actions {
   display: flex;
   flex-wrap: wrap;

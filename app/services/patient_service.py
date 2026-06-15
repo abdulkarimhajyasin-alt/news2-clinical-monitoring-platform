@@ -8,8 +8,26 @@ class PatientCodeExistsError(ValueError):
     pass
 
 
-def list_patients(db: Session) -> list[Patient]:
-    return db.query(Patient).order_by(Patient.patient_code).all()
+def list_patients(
+    db: Session,
+    *,
+    status: str | None = None,
+    include_archived: bool = False,
+    include_deleted: bool = False,
+) -> list[Patient]:
+    query = db.query(Patient)
+    if status:
+        query = query.filter(Patient.status == status)
+    else:
+        allowed_statuses = ["active"]
+        if include_archived:
+            allowed_statuses.extend(["discharged", "archived"])
+        if include_deleted:
+            allowed_statuses.append("deleted")
+        query = query.filter(Patient.status.in_(allowed_statuses))
+    if not include_deleted:
+        query = query.filter(Patient.status != "deleted")
+    return query.order_by(Patient.patient_code).all()
 
 
 def create_patient(db: Session, payload: PatientCreate) -> Patient:

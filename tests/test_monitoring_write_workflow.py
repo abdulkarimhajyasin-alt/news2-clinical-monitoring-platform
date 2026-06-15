@@ -152,6 +152,30 @@ def test_session_patient_mismatch_returns_400(client_with_database):
     assert response.status_code == 400
 
 
+@pytest.mark.parametrize("patient_status", ["discharged", "archived", "deleted"])
+def test_non_active_patients_cannot_receive_measurements(client_with_database, patient_status):
+    client, TestingSession, ids = client_with_database
+    db = TestingSession()
+    try:
+        patient = db.get(Patient, ids["patient_id"])
+        patient.status = patient_status
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post("/api/monitoring/measurements", json=valid_payload(ids))
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Patient is not active"
+    db = TestingSession()
+    try:
+        assert db.query(IntradialyticMeasurement).count() == 0
+        assert db.query(News2Assessment).count() == 0
+        assert db.query(Alert).count() == 0
+    finally:
+        db.close()
+
+
 def test_invalid_vital_signs_return_422(client_with_database):
     client, _, ids = client_with_database
     payload = valid_payload(ids)

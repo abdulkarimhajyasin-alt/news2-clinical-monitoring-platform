@@ -154,6 +154,8 @@ def build_research_dataset(db: Session, filters: dict[str, object] | None = None
         session = db.get(DialysisSession, assessment.dialysis_session_id)
         if measurement is None or patient is None:
             continue
+        if patient.status == "deleted":
+            continue
         alert = db.query(Alert).filter(Alert.news2_assessment_id == assessment.id).first()
         event = db.query(ClinicalDeteriorationEvent).filter(ClinicalDeteriorationEvent.news2_assessment_id == assessment.id).first()
         response = (

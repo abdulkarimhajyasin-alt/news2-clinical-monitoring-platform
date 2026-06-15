@@ -145,6 +145,15 @@ class PatientRead(BaseModel):
     dialysis_vintage_months: int | None = None
     weekly_sessions_count: int | None = None
     is_anonymized: bool
+    status: str = "active"
+    discharged_at: datetime | None = None
+    discharge_reason: str | None = None
+    discharge_notes: str | None = None
+    archived_at: datetime | None = None
+    archived_by_user_id: int | None = None
+    deleted_at: datetime | None = None
+    deleted_by_user_id: int | None = None
+    delete_reason: str | None = None
 
 
 class PatientCreate(BaseModel):
@@ -177,6 +186,40 @@ class PatientCreate(BaseModel):
 class PatientCreateResult(BaseModel):
     patient: PatientRead
     patient_created: bool
+    message: str
+
+
+class PatientDischargeRequest(BaseModel):
+    discharge_reason: str = Field(min_length=2, max_length=255)
+    discharge_notes: str | None = Field(default=None, max_length=4000)
+
+    @field_validator("discharge_reason", "discharge_notes")
+    @classmethod
+    def strip_discharge_text(cls, value: str | None) -> str | None:
+        return value.strip() if isinstance(value, str) else value
+
+
+class PatientArchiveRequest(BaseModel):
+    archive_reason: str | None = Field(default=None, max_length=255)
+
+    @field_validator("archive_reason")
+    @classmethod
+    def strip_archive_text(cls, value: str | None) -> str | None:
+        return value.strip() if isinstance(value, str) else value
+
+
+class PatientDeleteRequest(BaseModel):
+    delete_reason: str = Field(min_length=2, max_length=4000)
+    confirmation_text: str
+
+    @field_validator("delete_reason", "confirmation_text")
+    @classmethod
+    def strip_delete_text(cls, value: str) -> str:
+        return value.strip()
+
+
+class PatientLifecycleResult(BaseModel):
+    patient: PatientRead
     message: str
 
 

@@ -41,3 +41,5 @@ Phase 11 adds the Research Dataset & Export Center. It builds one flat row per i
 Phase 12 adds the Research Analytics Dashboard. It uses the research dataset layer to calculate descriptive study KPIs, NEWS2 distributions, risk-level summaries, outcome rates, response-time metrics, deterioration summaries, and study group/phase comparisons. Inferential pre/post analysis remains intentionally out of scope.
 
 Phase 13 adds Study Management and the Research Protocol Center. It defines the study registry, protocol configuration, baseline/intervention timeline, readiness checks, and audit trail for research-governance activities. Authentication, RBAC, publication generation, and inferential statistics remain out of scope.
+
+Phase 17 adds patient lifecycle states. Discharged and archived patients remain part of research summaries and traceability unless a future governed export filter explicitly narrows the cohort. Soft-deleted patients are hidden from default operational patient lists, while related clinical measurements, NEWS2 assessments, alerts, deterioration events, responses, outcomes, and audit logs remain preserved.

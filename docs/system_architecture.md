@@ -4,6 +4,8 @@ The system starts with patient baseline data, including dialysis vintage, comorb
 
 Patient creation is connected end-to-end through `POST /api/patients`. The workflow validates required clinical/research fields, prevents duplicate patient codes, applies safe study defaults, and persists records to the active database before they become available to patient lists and downstream research summaries.
 
+Patient lifecycle state is stored on the patient record. `active`, `discharged`, `archived`, and `deleted` statuses support operational hiding without deleting clinical traceability. Discharge, archive, restore, and soft-delete actions are audited and exposed through dedicated patient endpoints.
+
 Each dialysis session records operational details such as session date, start/end time, ultrafiltration, blood flow, dialysate settings, and session status.
 
 Intradialytic monitoring captures repeated vital sign measurements during a session. These observations feed NEWS2 assessment records.
@@ -37,6 +39,8 @@ The Phase 14 RBAC layer centralizes role labels, permission strings, and the per
 The Phase 15 enterprise user-management layer adds the `technical_admin` role, staff creation and activation APIs under `/api/users`, hashed temporary password storage, and Administration navigation visibility based on user/RBAC/audit/settings permissions.
 
 The Phase 16 authentication layer verifies stored password hashes, creates HTTP-only cookie sessions backed by the `auth_sessions` table, exposes login/current-user/logout APIs, and resolves RBAC from the authenticated user's stored role. `X-Dev-Role` is disabled by default and is available only when `NEWS2_ALLOW_DEV_ROLE=true` for local/test workflows.
+
+The Phase 17 patient lifecycle layer adds non-destructive patient status transitions. Startup applies missing patient lifecycle columns safely for deployed databases, and clinical write paths reject new measurements for non-active patients.
 
 Deployment startup initializes the database before requests are served. The startup helper creates missing tables with SQLAlchemy metadata, applies non-destructive user-management column hardening, never drops existing tables, optionally seeds demo/research data only when the users/patients tables are empty, and ensures an initial admin account exists when no admin user is present.
 

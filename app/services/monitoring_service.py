@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.models import DialysisSession, IntradialyticMeasurement, News2Assessment, Patient
 from app.schemas import MonitoringMeasurementCreate, NEWS2CalculationRequest
 from app.services.alert_service import create_alert_from_news2_assessment
+from app.services.patient_lifecycle_service import ensure_patient_is_active
 from app.services.news2_service import calculate_news2
 
 
@@ -40,6 +41,7 @@ def create_measurement_with_news2(db: Session, payload: MonitoringMeasurementCre
     patient = db.get(Patient, payload.patient_id)
     if patient is None:
         raise PatientNotFoundError("Patient not found")
+    ensure_patient_is_active(patient)
 
     session = db.get(DialysisSession, payload.dialysis_session_id)
     if session is None:

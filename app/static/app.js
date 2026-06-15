@@ -231,6 +231,10 @@ const appState = {
   currentRoleLabel: "مدير النظام",
   permissions: [],
   permissionMatrix: null,
+  patientStatusFilter: "active",
+  patientDataScope: "",
+  lifecycleAction: null,
+  lifecycleSubmission: null,
   navCollapsed: localStorage.getItem("news2NavCollapsed") === "true",
   expandedNavGroups: new Set(JSON.parse(localStorage.getItem("news2ExpandedNavGroups") || "[]")),
   loading: {},
@@ -301,8 +305,8 @@ const api = {
       body: JSON.stringify(payload)
     }).then(normalizeStaffUser);
   },
-  getPatients() {
-    return this.request("/api/patients").then((rows) => rows.map(normalizePatient));
+  getPatients(filters = {}) {
+    return this.request(`/api/patients${queryString(filters)}`).then((rows) => rows.map(normalizePatient));
   },
   createPatient(payload) {
     return this.request("/api/patients", {
@@ -310,6 +314,30 @@ const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
+  },
+  dischargePatient(patientId, payload) {
+    return this.request(`/api/patients/${patientId}/discharge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(normalizePatientLifecycleResult);
+  },
+  archivePatient(patientId, payload = {}) {
+    return this.request(`/api/patients/${patientId}/archive`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(normalizePatientLifecycleResult);
+  },
+  restorePatient(patientId) {
+    return this.request(`/api/patients/${patientId}/restore`, { method: "POST" }).then(normalizePatientLifecycleResult);
+  },
+  deletePatient(patientId, payload) {
+    return this.request(`/api/patients/${patientId}/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(normalizePatientLifecycleResult);
   },
   getDialysisSessions() {
     return this.request("/api/dialysis-sessions").then((rows) => rows.map(normalizeSession));
@@ -497,7 +525,21 @@ function normalizePatient(row) {
     studyGroup: row.study_group || "unknown",
     dialysisVintageMonths: row.dialysis_vintage_months ?? "-",
     weeklySessionsCount: row.weekly_sessions_count ?? "-",
-    isAnonymized: row.is_anonymized === true
+    isAnonymized: row.is_anonymized === true,
+    status: row.status || "active",
+    dischargedAt: row.discharged_at || null,
+    dischargeReason: row.discharge_reason || "",
+    dischargeNotes: row.discharge_notes || "",
+    archivedAt: row.archived_at || null,
+    deletedAt: row.deleted_at || null,
+    deleteReason: row.delete_reason || ""
+  };
+}
+
+function normalizePatientLifecycleResult(row) {
+  return {
+    patient: normalizePatient(row.patient || {}),
+    message: row.message || ""
   };
 }
 
@@ -828,6 +870,21 @@ function queryString(filters) {
   return value ? `?${value}` : "";
 }
 
+function currentPatientListFilters() {
+  const status = appState.patientStatusFilter || "active";
+  return {
+    status,
+    include_deleted: status === "deleted" && hasPermission("patients:delete")
+  };
+}
+
+function profilePatientFilters() {
+  return {
+    include_archived: true,
+    include_deleted: hasPermission("patients:delete")
+  };
+}
+
 const labels = {
   risk: { low: "منخفض", medium: "متوسط", high: "مرتفع", critical: "حرج" },
   studyPhase: { pre_implementation: "قبل التطبيق", post_implementation: "بعد التطبيق" },
@@ -908,8 +965,19 @@ const PERMISSION_ACTION_LABELS = {
   update: "تعديل",
   manage: "إدارة",
   disable: "إيقاف",
+  discharge: "تخريج",
+  archive: "أرشفة",
+  restore: "استعادة",
+  delete: "حذف",
   analytics: "تحليلات",
   export: "تصدير"
+};
+
+labels.patientStatus = {
+  active: "نشط",
+  discharged: "مُخرّج",
+  archived: "مؤرشف",
+  deleted: "محذوف"
 };
 
 labels.studyStatus = {
@@ -955,6 +1023,18 @@ function riskTone(value) {
 
 function hasPermission(permission) {
   return (appState.permissions || []).includes(permission);
+}
+
+function patientStatusTone(status) {
+  if (status === "active") return "success";
+  if (status === "discharged") return "info";
+  if (status === "archived") return "warning";
+  if (status === "deleted") return "danger";
+  return "neutral";
+}
+
+function patientStatusBadge(status) {
+  return badge(label(labels.patientStatus, status || "active"), patientStatusTone(status || "active"));
 }
 
 function routeById(routeId) {
@@ -1079,6 +1159,19 @@ function setRoute(routeId) {
   closeMobileNav();
 }
 
+async function setPatientStatusFilter(status) {
+  appState.patientStatusFilter = status;
+  appState.patientDataScope = "";
+  await loadPatients(currentPatientListFilters(), `patients:${status}`);
+}
+
+function setLifecycleAction(action) {
+  appState.lifecycleAction = action;
+  appState.lifecycleSubmission = null;
+  appState.errors.lifecycleSubmission = null;
+  render();
+}
+
 function handleActionKey(event, routeId) {
   if (event.key !== "Enter" && event.key !== " ") return;
   event.preventDefault();
@@ -1193,6 +1286,11 @@ async function loadResource(key, loader) {
   }
 }
 
+async function loadPatients(filters = {}, scope = JSON.stringify(filters)) {
+  await loadResource("patients", () => api.getPatients(filters));
+  appState.patientDataScope = scope;
+}
+
 async function loadHealth() {
   try {
     appState.health = await api.getHealth();
@@ -1290,16 +1388,17 @@ function compactObject(value) {
 }
 
 function ensureDataForRoute(route) {
+  const listScope = `patients:${appState.patientStatusFilter || "active"}`;
   if (route.id === "dashboard") {
     if (!appState.researchSummary && !appState.loading.researchSummary) loadResource("researchSummary", api.getResearchSummary.bind(api));
     if (!appState.alerts.length && !appState.loading.alerts) loadResource("alerts", api.getAlerts.bind(api));
-    if (!appState.patients.length && !appState.loading.patients) loadResource("patients", api.getPatients.bind(api));
+    if (!appState.patients.length && !appState.loading.patients) loadPatients(currentPatientListFilters(), listScope);
     if (!appState.dialysisSessions.length && !appState.loading.dialysisSessions) loadResource("dialysisSessions", api.getDialysisSessions.bind(api));
   }
-  if (route.type === "patients" && !appState.patients.length && !appState.loading.patients) loadResource("patients", api.getPatients.bind(api));
+  if (route.type === "patients" && appState.patientDataScope !== listScope && !appState.loading.patients) loadPatients(currentPatientListFilters(), listScope);
   if (route.id === "users" && !appState.staffUsers.length && !appState.loading.staffUsers) loadResource("staffUsers", api.getStaffUsers.bind(api));
   if (route.type === "profile") {
-    if (!appState.patients.length && !appState.loading.patients) loadResource("patients", api.getPatients.bind(api));
+    if (appState.patientDataScope !== "patients:profile" && !appState.loading.patients) loadPatients(profilePatientFilters(), "patients:profile");
     if (!appState.dialysisSessions.length && !appState.loading.dialysisSessions) loadResource("dialysisSessions", api.getDialysisSessions.bind(api));
     if (!appState.news2Assessments.length && !appState.loading.news2Assessments) loadResource("news2Assessments", api.getNews2Assessments.bind(api));
     if (!appState.alerts.length && !appState.loading.alerts) loadResource("alerts", api.getAlerts.bind(api));
@@ -1310,7 +1409,7 @@ function ensureDataForRoute(route) {
   if (route.type === "alerts" && !appState.alerts.length && !appState.loading.alerts) loadResource("alerts", api.getAlerts.bind(api));
   if (route.type === "research" && !appState.researchSummary && !appState.loading.researchSummary) loadResource("researchSummary", api.getResearchSummary.bind(api));
   if (route.id === "vital-signs-entry") {
-    if (!appState.patients.length && !appState.loading.patients) loadResource("patients", api.getPatients.bind(api));
+    if (appState.patientDataScope !== "patients:active" && !appState.loading.patients) loadPatients({ status: "active" }, "patients:active");
     if (!appState.dialysisSessions.length && !appState.loading.dialysisSessions) loadResource("dialysisSessions", api.getDialysisSessions.bind(api));
   }
   if (route.id === "intradialytic-monitoring" && !appState.monitoringMeasurements.length && !appState.loading.monitoringMeasurements) loadResource("monitoringMeasurements", api.getMonitoringMeasurements.bind(api));
@@ -1557,10 +1656,12 @@ function renderDashboard() {
 }
 
 function renderPatients() {
+  const tabs = renderPatientStatusTabs();
   if (appState.loading.patients) return tableSkeleton("جاري تحميل قائمة المرضى...");
   if (appState.errors.patients) return errorBlock("patients");
-  if (!appState.patients.length) return emptyBlock("لا توجد بيانات مرضى حتى الآن");
+  if (!appState.patients.length) return `${tabs}${emptyBlock("لا توجد بيانات مرضى ضمن هذا التصنيف")}`;
   return `
+    ${tabs}
     <div class="grid cols-3">
       ${renderKpi(["إجمالي المرضى", appState.patients.length, "بيانات قاعدة محلية", "info"])}
       ${renderKpi(["مرحلة التدخل", appState.patients.filter((p) => p.studyGroup === "intervention").length, "مجموعة الدراسة", "success"])}
@@ -1571,6 +1672,16 @@ function renderPatients() {
 
 function patientSearchText(patient) {
   return `${patient.patientCode || ""} ${patient.fullName || ""}`.toLowerCase();
+}
+
+function renderPatientStatusTabs() {
+  const tabs = [
+    ["active", "المرضى النشطون"],
+    ["discharged", "المرضى المُخرّجون"],
+    ["archived", "المرضى المؤرشفون"],
+    ...(hasPermission("patients:delete") ? [["deleted", "المرضى المحذوفون"]] : [])
+  ];
+  return `<div class="filter-tabs">${tabs.map(([status, text]) => `<button class="filter-tab ${appState.patientStatusFilter === status ? "active" : ""}" type="button" onclick="setPatientStatusFilter('${status}')">${escapeHtml(text)}</button>`).join("")}</div>`;
 }
 
 function filteredProfilePatients() {
@@ -1593,6 +1704,7 @@ function renderPatientSelectionTable(patients, options = {}) {
     ...(includeVintage ? ["مدة الغسيل بالشهور"] : []),
     "جلسات أسبوعية"
   ];
+  headers.push("الحالة");
   const rows = patients.map((patient) => `
     <tr class="clickable-row" data-patient-search-row data-search="${escapeHtml(patientSearchText(patient))}" onclick="selectPatientProfile(${patient.id})">
       <td><button class="table-link" type="button" onclick="event.stopPropagation(); selectPatientProfile(${patient.id})">${escapeHtml(patient.patientCode)}</button></td>
@@ -1603,6 +1715,7 @@ function renderPatientSelectionTable(patients, options = {}) {
       <td>${escapeHtml(label(labels.studyGroup, patient.studyGroup))}</td>
       ${includeVintage ? `<td>${escapeHtml(patient.dialysisVintageMonths)}</td>` : ""}
       <td>${escapeHtml(patient.weeklySessionsCount)}</td>
+      <td>${patientStatusBadge(patient.status)}</td>
     </tr>`).join("");
   return `<div class="table-wrap patient-selector-table"><table><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
@@ -1980,7 +2093,8 @@ function renderPatientCreateForm(route) {
 }
 
 function renderVitalSignsEntry() {
-  const patientOptions = appState.patients.map((patient) => `<option value="${patient.id}">${escapeHtml(patient.patientCode)}</option>`).join("");
+  const activePatients = appState.patients.filter((patient) => patient.status === "active");
+  const patientOptions = activePatients.map((patient) => `<option value="${patient.id}">${escapeHtml(patient.patientCode)}</option>`).join("");
   const sessionOptions = appState.dialysisSessions.map((session) => `<option value="${session.id}" data-patient-id="${session.patientId}">${escapeHtml(session.patientCode)} - ${escapeHtml(session.sessionDate)} - ${escapeHtml(label(labels.sessionStatus, session.sessionStatus))}</option>`).join("");
   const result = appState.monitoringSubmission?.news2_assessment;
   const success = appState.monitoringSubmission ? `<div class="state-message empty"><strong>تم حفظ القياس وحساب NEWS2 بنجاح</strong><span>تم إنشاء سجل قياس وسجل تقييم NEWS2 دون إنشاء تنبيه آلي في هذه المرحلة.</span></div>` : "";
@@ -2011,6 +2125,57 @@ function renderVitalSignsEntry() {
   </div>`;
 }
 
+function renderPatientLifecyclePanel(patient) {
+  const status = patient.status || "active";
+  const actions = [];
+  if (status === "active" && hasPermission("patients:discharge")) actions.push(`<button class="btn" type="button" onclick="setLifecycleAction('discharge')">تخريج المريض</button>`);
+  if (status === "active" && hasPermission("patients:archive")) actions.push(`<button class="btn" type="button" onclick="setLifecycleAction('archive')">أرشفة المريض</button>`);
+  if (["discharged", "archived", "deleted"].includes(status) && hasPermission("patients:restore")) actions.push(`<button class="btn primary" type="button" onclick="restorePatient(${patient.id})">استعادة المريض</button>`);
+  if (status !== "deleted" && hasPermission("patients:delete")) actions.push(`<button class="btn danger" type="button" onclick="setLifecycleAction('delete')">حذف ملف المريض</button>`);
+  const result = appState.lifecycleSubmission ? `<div class="state-message empty"><strong>${patientLifecycleSuccessMessage(appState.lifecycleSubmission.message)}</strong></div>` : "";
+  const error = appState.errors.lifecycleSubmission ? `<div class="state-message error" role="alert"><strong>تعذر تحديث حالة المريض</strong><span>${escapeHtml(appState.errors.lifecycleSubmission)}</span></div>` : "";
+  return `
+    <div class="lifecycle-panel">
+      <div class="lifecycle-actions">${actions.join("") || `<span class="kpi-meta">لا توجد إجراءات متاحة لهذا الدور.</span>`}</div>
+      ${result}${error}
+      ${renderPatientLifecycleForm(patient)}
+    </div>`;
+}
+
+function renderPatientLifecycleForm(patient) {
+  if (appState.lifecycleAction === "discharge") {
+    return `<form class="form-grid lifecycle-form" onsubmit="submitPatientLifecycle(event, 'discharge', ${patient.id})">
+      <div class="field full"><label>سبب التخريج</label><input name="discharge_reason" required maxlength="255"></div>
+      <div class="field full"><label>ملاحظات التخريج</label><textarea name="discharge_notes"></textarea></div>
+      <div class="footer-actions full"><button class="btn primary" type="submit" ${appState.loading.lifecycleSubmission ? "disabled" : ""}>تأكيد التخريج</button><button class="btn" type="button" onclick="setLifecycleAction(null)">إلغاء</button></div>
+    </form>`;
+  }
+  if (appState.lifecycleAction === "archive") {
+    return `<form class="form-grid lifecycle-form" onsubmit="submitPatientLifecycle(event, 'archive', ${patient.id})">
+      <div class="state-message warning full"><strong>أرشفة المريض</strong><span>سيتم إخفاء المريض من القوائم التشغيلية مع الحفاظ على البيانات البحثية.</span></div>
+      <input name="archive_reason" type="hidden" value="archived_from_profile">
+      <div class="footer-actions full"><button class="btn primary" type="submit" ${appState.loading.lifecycleSubmission ? "disabled" : ""}>تأكيد الأرشفة</button><button class="btn" type="button" onclick="setLifecycleAction(null)">إلغاء</button></div>
+    </form>`;
+  }
+  if (appState.lifecycleAction === "delete") {
+    return `<form class="form-grid lifecycle-form" onsubmit="submitPatientLifecycle(event, 'delete', ${patient.id})">
+      <div class="state-message error full"><strong>تحذير مهم</strong><span>سيتم إخفاء ملف المريض من النظام التشغيلي. ستبقى البيانات محفوظة في السجلات البحثية والتدقيق.</span></div>
+      <div class="field full"><label>سبب الحذف</label><textarea name="delete_reason" required></textarea></div>
+      <div class="field full"><label>اكتب: حذف المريض</label><input name="confirmation_text" required></div>
+      <div class="footer-actions full"><button class="btn danger" type="submit" ${appState.loading.lifecycleSubmission ? "disabled" : ""}>تأكيد الحذف</button><button class="btn" type="button" onclick="setLifecycleAction(null)">إلغاء</button></div>
+    </form>`;
+  }
+  return "";
+}
+
+function patientLifecycleSuccessMessage(message) {
+  if (message === "patient_discharged") return "تم تخريج المريض بنجاح";
+  if (message === "patient_archived") return "تمت أرشفة المريض بنجاح";
+  if (message === "patient_restored") return "تمت استعادة المريض بنجاح";
+  if (message === "patient_soft_deleted") return "تم حذف ملف المريض بشكل آمن";
+  return "تم تحديث حالة المريض";
+}
+
 function renderProfile() {
   if (!appState.selectedPatientId) return renderPatientProfileSelector();
   if (appState.loading.patients && !appState.patients.length) return tableSkeleton("جاري تحميل قائمة المرضى...");
@@ -2024,14 +2189,17 @@ function renderProfile() {
   const patientEvents = appState.deteriorationEvents.filter((event) => event.patientId === patient.id).slice(0, 5);
   const patientOutcomes = appState.clinicalOutcomes.filter((outcome) => outcome.patientId === patient.id).slice(0, 5);
   const news2Scores = patientAssessments.slice(-8).map((assessment) => assessment.totalScore ?? 0);
+  const lifecyclePanel = renderPatientLifecyclePanel(patient);
 
   return `
     <div class="footer-actions profile-actions">
       <button class="btn" type="button" onclick="showPatientProfileSelector()">اختيار مريض آخر</button>
+      ${lifecyclePanel}
     </div>
     ${card("ملف المريض", `<div class="patient-summary">${[
       ["رمز المريض", patient.patientCode],
       ["الاسم", patient.fullName || "-"],
+      ["الحالة", label(labels.patientStatus, patient.status)],
       ["العمر", patient.age],
       ["الجنس", label(labels.gender, patient.gender)],
       ["مرحلة الدراسة", label(labels.studyPhase, patient.studyPhase)],
@@ -2244,6 +2412,58 @@ async function submitPatientCreate(event) {
     appState.errors.patientSubmission = error.message || "تعذر حفظ المريض";
   } finally {
     appState.loading.patientSubmission = false;
+    render();
+  }
+}
+
+async function submitPatientLifecycle(event, action, patientId) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  appState.loading.lifecycleSubmission = true;
+  appState.errors.lifecycleSubmission = null;
+  appState.lifecycleSubmission = null;
+  render();
+  try {
+    if (action === "discharge") {
+      appState.lifecycleSubmission = await api.dischargePatient(patientId, {
+        discharge_reason: data.get("discharge_reason"),
+        discharge_notes: data.get("discharge_notes") || null
+      });
+    } else if (action === "archive") {
+      appState.lifecycleSubmission = await api.archivePatient(patientId, { archive_reason: data.get("archive_reason") || null });
+    } else if (action === "delete") {
+      appState.lifecycleSubmission = await api.deletePatient(patientId, {
+        delete_reason: data.get("delete_reason"),
+        confirmation_text: data.get("confirmation_text")
+      });
+    }
+    appState.lifecycleAction = null;
+    appState.patients = await api.getPatients(profilePatientFilters());
+    appState.patientDataScope = "patients:profile";
+    appState.researchSummary = await api.getResearchSummary();
+  } catch (error) {
+    appState.errors.lifecycleSubmission = error.message || "تعذر تحديث حالة المريض";
+  } finally {
+    appState.loading.lifecycleSubmission = false;
+    render();
+  }
+}
+
+async function restorePatient(patientId) {
+  if (!confirm("هل تريد استعادة المريض إلى الحالة النشطة؟")) return;
+  appState.loading.lifecycleSubmission = true;
+  appState.errors.lifecycleSubmission = null;
+  render();
+  try {
+    appState.lifecycleSubmission = await api.restorePatient(patientId);
+    appState.lifecycleAction = null;
+    appState.patients = await api.getPatients(profilePatientFilters());
+    appState.patientDataScope = "patients:profile";
+    appState.researchSummary = await api.getResearchSummary();
+  } catch (error) {
+    appState.errors.lifecycleSubmission = error.message || "تعذر استعادة المريض";
+  } finally {
+    appState.loading.lifecycleSubmission = false;
     render();
   }
 }
@@ -3275,6 +3495,10 @@ window.submitStudyForm = submitStudyForm;
 window.submitLogin = submitLogin;
 window.logout = logout;
 window.changeDevRole = changeDevRole;
+window.setPatientStatusFilter = setPatientStatusFilter;
+window.setLifecycleAction = setLifecycleAction;
+window.submitPatientLifecycle = submitPatientLifecycle;
+window.restorePatient = restorePatient;
 window.handleActionKey = handleActionKey;
 window.selectPatientProfile = selectPatientProfile;
 window.showPatientProfileSelector = showPatientProfileSelector;

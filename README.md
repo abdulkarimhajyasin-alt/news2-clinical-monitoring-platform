@@ -89,6 +89,8 @@ Phase 15 adds enterprise user management and RBAC hardening. It introduces the `
 
 Phase 16 adds authentication and session security. It verifies stored password hashes, creates HTTP-only cookie sessions, supports logout and `/api/auth/me`, resolves RBAC from the authenticated user's database role, protects clinical/research read endpoints, and disables public role switching by default.
 
+Phase 17 adds the patient lifecycle workflow. Patients can be discharged, archived, restored, or soft-deleted through audited API actions. Default patient lists show active patients only, deleted patients require admin permission, and hard physical delete is avoided to preserve clinical and research traceability.
+
 The patient creation workflow is now connected to the backend. The Add Patient screen posts to `POST /api/patients`, persists the patient in SQLite/PostgreSQL, refreshes the patient list, and uses RBAC `patients:create`.
 
 Screens now using real database-backed data:
@@ -96,6 +98,7 @@ Screens now using real database-backed data:
 - Dashboard: `/api/research/summary`, `/api/alerts`, `/api/patients`, `/api/dialysis-sessions`
 - Patient List: `/api/patients`
 - Add Patient: `POST /api/patients`
+- Patient Lifecycle: `/api/patients/{id}/discharge`, `/api/patients/{id}/archive`, `/api/patients/{id}/restore`, `/api/patients/{id}/delete`
 - Dialysis Session List: `/api/dialysis-sessions`
 - Active Alerts: `/api/alerts`
 - Research Dashboard: `/api/research/summary`

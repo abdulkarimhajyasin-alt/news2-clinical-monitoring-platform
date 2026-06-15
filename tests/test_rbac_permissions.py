@@ -61,6 +61,19 @@ def test_on_call_doctor_can_manage_alerts():
     assert role_has_permission("on_call_doctor", "alerts:manage")
 
 
+def test_patient_lifecycle_permissions_follow_clinical_policy():
+    assert role_has_permission("admin", "patients:delete")
+    assert role_has_permission("technical_admin", "patients:archive")
+    assert role_has_permission("technical_admin", "patients:restore")
+    assert not role_has_permission("technical_admin", "patients:discharge")
+    assert not role_has_permission("technical_admin", "patients:delete")
+    assert role_has_permission("doctor", "patients:discharge")
+    assert role_has_permission("doctor", "patients:restore")
+    assert not role_has_permission("doctor", "patients:delete")
+    assert not role_has_permission("on_call_doctor", "patients:discharge")
+    assert not role_has_permission("nurse", "patients:discharge")
+
+
 def test_restricted_export_endpoint_returns_403_for_nurse(rbac_client):
     client, TestingSession = rbac_client
     response = client.get("/api/research/export/csv", headers={"X-Dev-Role": "nurse"})
