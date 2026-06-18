@@ -50,139 +50,158 @@ routes.splice(
   { id: "study-readiness", label: "جاهزية الدراسة", group: "البحث", icon: "SR", type: "study" }
 );
 
+const ROUTE_LABEL_OVERRIDES = {
+  dashboard: "الرئيسية",
+  patients: "المرضى",
+  "patient-profile": "ملف المريض",
+  "patient-baseline": "البيانات الأساسية",
+  sessions: "جلسات الغسيل",
+  "create-session": "تسجيل جلسة",
+  "intradialytic-monitoring": "المراقبة الرقمية",
+  "vital-signs-entry": "إدخال القياسات",
+  "news2-assessment": "تقييم NEWS2",
+  "news2-history": "سجل NEWS2",
+  "active-alerts": "التنبيهات",
+  "deterioration-events": "توثيق التدهور",
+  "medical-response-log": "استجابة الطبيب",
+  "nursing-response-log": "استجابة التمريض",
+  "response-workflow": "الاستجابة السريرية",
+  "response-time-dashboard": "زمن الاستجابة",
+  "clinical-outcomes": "النتيجة السريرية",
+  "outcome-tracking": "تتبع النتيجة",
+  "research-dashboard": "التحليل البحثي",
+  "study-metrics": "مؤشرات البحث",
+  "dataset-statistics": "جودة البيانات",
+  "export-center": "بيانات البحث",
+  "study-management": "بروتوكول الدراسة",
+  users: "إدارة المستخدمين"
+};
+
+routes.forEach((route) => {
+  if (ROUTE_LABEL_OVERRIDES[route.id]) route.label = ROUTE_LABEL_OVERRIDES[route.id];
+});
+
 const NAV_GROUPS = [
-  { label: "لوحة التحكم", icon: "D", route: "dashboard" },
+  { label: "الرئيسية", icon: "D", route: "dashboard" },
   {
     label: "المرضى",
     icon: "P",
     children: [
       { route: "patients" },
-      { route: "create-patient", permission: "patients:create" },
       { route: "patient-profile" },
       { route: "patient-baseline" },
-      { route: "vascular-access" }
+      { route: "create-patient", permission: "patients:create" }
     ]
   },
   {
-    label: "الجلسات",
+    label: "جلسات الغسيل",
     icon: "S",
     children: [
       { route: "sessions" },
-      { route: "create-session" },
-      { route: "session-details" },
-      { route: "intradialytic-monitoring" }
+      { route: "create-session" }
     ]
   },
   {
-    label: "التقييم",
+    label: "المراقبة الرقمية",
     icon: "VS",
     children: [
+      { route: "intradialytic-monitoring" },
       { route: "vital-signs-entry", permission: "measurements:create" },
       { route: "news2-assessment" },
-      { route: "news2-trend" },
       { route: "news2-history" }
     ]
   },
   {
     label: "التنبيهات",
     icon: "A",
-    children: [
-      { route: "active-alerts" },
-      { route: "alert-details" },
-      { route: "alert-timeline" }
-    ]
+    route: "active-alerts"
   },
   {
-    label: "الأحداث والاستجابة",
+    label: "الاستجابة السريرية",
     icon: "E",
     children: [
       { route: "deterioration-events" },
-      { route: "event-details" },
-      { route: "event-timeline" },
+      { route: "response-workflow" },
       { route: "medical-response-log" },
       { route: "nursing-response-log" },
-      { route: "response-workflow" },
-      { route: "response-time-dashboard" },
-      { route: "response-analytics" }
+      { route: "response-time-dashboard" }
     ]
   },
   {
-    label: "المآلات",
+    label: "النتيجة السريرية",
     icon: "CO",
     children: [
-      { route: "clinical-outcomes" },
       { route: "outcome-tracking" },
-      { route: "outcome-analytics" }
+      { route: "clinical-outcomes" }
     ]
   },
   {
-    label: "البحث",
+    label: "بيانات البحث",
+    icon: "EX",
+    route: "export-center",
+    permission: "research:view"
+  },
+  {
+    label: "التحليل البحثي",
     icon: "R",
     children: [
       { route: "research-dashboard" },
-      { route: "pre-post-comparison" },
       { route: "study-metrics", permission: "research:analytics" },
-      { route: "dataset-statistics", permission: "research:view" },
-      { route: "export-center", permission: "research:view" },
-      { route: "study-management", permission: "studies:view" },
-      { route: "research-protocol", permission: "studies:view" },
-      { route: "study-timeline", permission: "studies:view" },
-      { route: "study-readiness", permission: "studies:view" }
+      { route: "dataset-statistics", permission: "research:view" }
     ]
   },
   {
-    label: "الإدارة",
+    label: "بروتوكول الدراسة",
+    icon: "SG",
+    route: "study-management",
+    permission: "studies:view"
+  },
+  {
+    label: "إدارة المستخدمين",
     icon: "U",
-    children: [
-      { route: "users", permission: "users:view" },
-      { route: "create-user", permission: "users:create" },
-      { route: "roles", permission: "rbac:view" },
-      { route: "permissions", permission: "rbac:view" },
-      { route: "audit-logs", permission: "audit:view" },
-      { route: "system-settings", permission: "settings:view" },
-      { route: "language-settings", permission: "settings:view" }
-    ]
+    route: "users",
+    permission: "users:view"
   }
 ];
 
 const NAV_ROUTE_LABELS = {
-  patients: "قائمة المرضى",
+  patients: "المرضى",
   "create-patient": "إضافة مريض",
   "patient-profile": "ملف المريض",
-  "patient-baseline": "الخط الأساسي",
+  "patient-baseline": "البيانات الأساسية",
   "vascular-access": "الوصول الوعائي",
   sessions: "جلسات الغسيل",
-  "create-session": "إنشاء جلسة",
+  "create-session": "تسجيل جلسة",
   "session-details": "تفاصيل الجلسة",
-  "intradialytic-monitoring": "الرصد أثناء الجلسة",
-  "vital-signs-entry": "إدخال العلامات الحيوية",
+  "intradialytic-monitoring": "المراقبة الرقمية",
+  "vital-signs-entry": "إدخال القياسات",
   "news2-assessment": "تقييم NEWS2",
   "news2-trend": "اتجاه NEWS2",
   "news2-history": "سجل NEWS2",
-  "active-alerts": "التنبيهات النشطة",
+  "active-alerts": "التنبيهات",
   "alert-details": "تفاصيل التنبيه",
   "alert-timeline": "تسلسل التنبيه",
-  "deterioration-events": "أحداث التدهور",
+  "deterioration-events": "توثيق التدهور",
   "event-details": "تفاصيل الحدث",
   "event-timeline": "تسلسل الحدث",
-  "medical-response-log": "سجل الاستجابة الطبية",
-  "nursing-response-log": "سجل الاستجابة التمريضية",
-  "response-workflow": "مسار الاستجابة",
+  "medical-response-log": "استجابة الطبيب",
+  "nursing-response-log": "استجابة التمريض",
+  "response-workflow": "الاستجابة السريرية",
   "response-time-dashboard": "زمن الاستجابة",
   "response-analytics": "تحليلات الاستجابة",
-  "clinical-outcomes": "المآلات السريرية",
-  "outcome-tracking": "تتبع المآلات",
+  "clinical-outcomes": "النتيجة السريرية",
+  "outcome-tracking": "تتبع النتيجة",
   "outcome-analytics": "تحليلات المآلات",
-  "research-dashboard": "لوحة البحث",
+  "research-dashboard": "التحليل البحثي",
   "pre-post-comparison": "مقارنة قبل وبعد",
-  "study-metrics": "مؤشرات الدراسة",
-  "dataset-statistics": "إحصاءات البيانات",
-  "export-center": "مركز التصدير",
-  "study-management": "إدارة الدراسة",
+  "study-metrics": "مؤشرات البحث",
+  "dataset-statistics": "جودة البيانات",
+  "export-center": "بيانات البحث",
+  "study-management": "بروتوكول الدراسة",
   "research-protocol": "بروتوكول البحث",
   "study-timeline": "الخط الزمني للدراسة",
   "study-readiness": "جاهزية الدراسة",
-  users: "المستخدمون",
+  users: "إدارة المستخدمين",
   roles: "الأدوار",
   permissions: "الصلاحيات",
   "audit-logs": "سجلات التدقيق",
