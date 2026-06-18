@@ -229,6 +229,7 @@ const appState = {
   outcomeSummary: null,
   outcomeSubmission: null,
   patientSubmission: null,
+  sessionSubmission: null,
   researchDatasetRows: [],
   researchDatasetQuality: null,
   researchExportFilters: {},
@@ -334,6 +335,13 @@ const api = {
       body: JSON.stringify(payload)
     });
   },
+  updatePatient(patientId, payload) {
+    return this.request(`/api/patients/${patientId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(normalizePatient);
+  },
   dischargePatient(patientId, payload) {
     return this.request(`/api/patients/${patientId}/discharge`, {
       method: "POST",
@@ -360,6 +368,13 @@ const api = {
   },
   getDialysisSessions() {
     return this.request("/api/dialysis-sessions").then((rows) => rows.map(normalizeSession));
+  },
+  createDialysisSession(payload) {
+    return this.request("/api/dialysis-sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(normalizeSession);
   },
   getAlerts() {
     return this.request("/api/alerts").then((rows) => rows.map(normalizeAlert));
@@ -537,13 +552,26 @@ function normalizePatient(row) {
   return {
     id: row.id,
     patientCode: row.patient_code || `P-${row.id}`,
+    medicalCode: row.medical_code || row.patient_code || `P-${row.id}`,
     fullName: row.full_name || "",
     age: row.age ?? "-",
     gender: row.gender || "unknown",
+    educationLevel: row.education_level || "",
+    targetDryWeight: row.target_dry_weight ?? row.dry_weight_kg ?? "",
+    dialysisStartDate: row.dialysis_start_date || "",
     studyPhase: row.study_phase || "unknown",
     studyGroup: row.study_group || "unknown",
     dialysisVintageMonths: row.dialysis_vintage_months ?? "-",
-    weeklySessionsCount: row.weekly_sessions_count ?? "-",
+    weeklySessionsCount: row.weekly_sessions_count ?? row.weekly_dialysis_sessions ?? "-",
+    comorbidities: row.comorbidities || "",
+    comorbidHeartFailure: row.comorbid_heart_failure === true,
+    comorbidDiabetes: row.comorbid_diabetes === true,
+    comorbidHypertension: row.comorbid_hypertension === true,
+    comorbiditiesNotes: row.comorbidities_notes || "",
+    baselineFunctionalStatus: row.baseline_functional_status || "",
+    vascularAccessType: row.vascular_access_type || "",
+    vascularAccessLocation: row.vascular_access_location || "",
+    vascularAccessPlacementDate: row.vascular_access_placement_date || "",
     isAnonymized: row.is_anonymized === true,
     status: row.status || "active",
     dischargedAt: row.discharged_at || null,
@@ -569,9 +597,12 @@ function normalizeSession(row) {
     patientCode: row.patient_code || `ID ${row.patient_id}`,
     sessionDate: row.session_date || "-",
     weekday: row.weekday || "-",
+    sessionDayOfWeek: row.session_day_of_week || row.weekday || "-",
     actualStartTime: row.actual_start_time || null,
     actualEndTime: row.actual_end_time || null,
     targetUltrafiltration: row.target_ultrafiltration ?? "-",
+    targetFluidRemovalMl: row.target_fluid_removal_ml ?? "",
+    sessionDurationMinutes: row.session_duration_minutes ?? "",
     sessionStatus: row.session_status || "unknown"
   };
 }
@@ -1395,11 +1426,19 @@ function patientPayloadFromForm(form) {
     full_name: data.get("full_name"),
     age: ageValue !== "" && ageValue !== null ? Number(ageValue) : null,
     gender: data.get("gender"),
+    education_level: data.get("education_level") || null,
     target_dry_weight: data.get("target_dry_weight") ? Number(data.get("target_dry_weight")) : null,
     dialysis_start_date: data.get("dialysis_start_date") || null,
     weekly_sessions_count: data.get("weekly_sessions_count") ? Number(data.get("weekly_sessions_count")) : 3,
     comorbidities: data.get("comorbidities") || null,
+    comorbid_heart_failure: data.get("comorbid_heart_failure") === "true",
+    comorbid_diabetes: data.get("comorbid_diabetes") === "true",
+    comorbid_hypertension: data.get("comorbid_hypertension") === "true",
+    comorbidities_notes: data.get("comorbidities_notes") || null,
     baseline_functional_status: data.get("baseline_functional_status") || null,
+    vascular_access_type: data.get("vascular_access_type") || null,
+    vascular_access_location: data.get("vascular_access_location") || null,
+    vascular_access_placement_date: data.get("vascular_access_placement_date") || null,
     study_phase: data.get("study_phase") || "post_implementation",
     study_group: data.get("study_group") || "intervention",
     is_anonymized: true
@@ -1440,6 +1479,7 @@ function ensureDataForRoute(route) {
     if (!appState.clinicalOutcomes.length && !appState.loading.clinicalOutcomes) loadResource("clinicalOutcomes", api.getClinicalOutcomes.bind(api));
   }
   if (route.type === "sessions" && !appState.dialysisSessions.length && !appState.loading.dialysisSessions) loadResource("dialysisSessions", api.getDialysisSessions.bind(api));
+  if (route.id === "create-session" && appState.patientDataScope !== "patients:active" && !appState.loading.patients) loadPatients({ status: "active" }, "patients:active");
   if (route.type === "alerts" && !appState.alerts.length && !appState.loading.alerts) loadResource("alerts", api.getAlerts.bind(api));
   if (route.type === "research" && !appState.researchSummary && !appState.loading.researchSummary) loadResource("researchSummary", api.getResearchSummary.bind(api));
   if (route.id === "vital-signs-entry") {
@@ -1776,13 +1816,13 @@ function renderSessions() {
     session.id,
     session.patientCode,
     session.sessionDate,
-    session.weekday,
+    session.sessionDayOfWeek,
     formatDateTime(session.actualStartTime),
     formatDateTime(session.actualEndTime),
-    session.targetUltrafiltration,
+    session.targetFluidRemovalMl || session.targetUltrafiltration,
     label(labels.sessionStatus, session.sessionStatus)
   ]);
-  return card("جلسات الغسيل", renderTable(["المعرف", "رمز المريض", "تاريخ الجلسة", "اليوم", "وقت البدء", "وقت الانتهاء", "السحب المستهدف", "الحالة"], rows));
+  return card("جلسات الغسيل", renderTable(["المعرف", "رمز المريض", "تاريخ الجلسة", "اليوم", "وقت البدء", "وقت الانتهاء", "سحب السوائل المستهدف", "الحالة"], rows));
 }
 
 function renderAlerts() {
@@ -2096,6 +2136,7 @@ function staffErrorMessage(message) {
 function renderFormScreen(route) {
   if (route.entity === "vitals") return renderVitalSignsEntry();
   if (route.entity === "patient") return renderPatientCreateForm(route);
+  if (route.entity === "session") return renderSessionCreateForm(route);
   if (route.entity === "staff") return renderStaffCreateForm();
   const fields = formFields[route.entity] || formFields.patient;
   return card(route.label, `<div class="form-grid">${fields.map((field, index) => `<div class="field ${index === fields.length - 1 ? "full" : ""}"><label>${field}</label>${index === fields.length - 1 ? `<textarea placeholder="${field}"></textarea>` : `<input placeholder="${field}">`}</div>`).join("")}</div><div class="footer-actions"><button class="btn primary">حفظ</button><button class="btn">حفظ كمسودة</button><button class="btn">إلغاء</button></div>`);
@@ -2108,16 +2149,26 @@ function renderPatientCreateForm(route) {
     ${appState.errors.patientSubmission ? `<div class="state-message error" role="alert"><strong>تعذر حفظ المريض</strong><span>${escapeHtml(patientErrorMessage(appState.errors.patientSubmission))}</span></div>` : ""}
     ${canCreate ? "" : `<div class="state-message warning"><strong>ليست لديك صلاحية إضافة مريض</strong><span>استخدم دور الطبيب أو المدير في الوضع التجريبي.</span></div>`}
     <form class="form-grid" onsubmit="submitPatientCreate(event)">
+      <div class="field full"><strong>الملف الأساسي للمريض</strong></div>
       <div class="field"><label>الاسم الكامل</label><input name="full_name" required placeholder="الاسم الكامل"></div>
-      <div class="field"><label>رقم الملف</label><input name="patient_code" required placeholder="ANON-P-1004"></div>
+      <div class="field"><label>الرقم الطبي المشفر</label><input name="patient_code" required placeholder="ANON-P-1004"></div>
       <div class="field"><label>العمر</label><input name="age" type="number" min="0" max="130" required placeholder="58"></div>
       <div class="field"><label>تاريخ الميلاد</label><input name="birth_date" type="date"></div>
       <div class="field"><label>الجنس</label><select name="gender" required><option value="">اختر</option><option value="female">أنثى</option><option value="male">ذكر</option></select></div>
-      <div class="field"><label>نوع الوصول الوعائي</label><input name="vascular_access_type" placeholder="لا يحفظ ضمن جدول المرضى حاليا"></div>
-      <div class="field full"><label>الأمراض المصاحبة</label><textarea name="comorbidities" placeholder="الأمراض المصاحبة"></textarea></div>
+      <div class="field"><label>المستوى التعليمي</label><input name="education_level" placeholder="مثال: ثانوي / جامعي"></div>
       <div class="field"><label>عدد جلسات الغسيل أسبوعيا</label><input name="weekly_sessions_count" type="number" min="1" max="14" value="3"></div>
       <div class="field"><label>وزن الجفاف المستهدف</label><input name="target_dry_weight" type="number" min="1" max="500" step="0.1"></div>
       <div class="field"><label>تاريخ بداية الغسيل</label><input name="dialysis_start_date" type="date"></div>
+      <div class="field full"><strong>الأمراض المصاحبة</strong></div>
+      <div class="field"><label>قصور القلب</label><select name="comorbid_heart_failure"><option value="false">لا</option><option value="true">نعم</option></select></div>
+      <div class="field"><label>داء السكري</label><select name="comorbid_diabetes"><option value="false">لا</option><option value="true">نعم</option></select></div>
+      <div class="field"><label>ارتفاع ضغط الدم</label><select name="comorbid_hypertension"><option value="false">لا</option><option value="true">نعم</option></select></div>
+      <div class="field full"><label>الأمراض المصاحبة الأخرى</label><textarea name="comorbidities" placeholder="الأمراض المصاحبة"></textarea></div>
+      <div class="field full"><label>ملاحظات الأمراض المصاحبة</label><textarea name="comorbidities_notes" placeholder="ملاحظات إضافية"></textarea></div>
+      <div class="field full"><strong>الوصلة الوعائية الحالية</strong></div>
+      <div class="field"><label>نوع الوصلة الوعائية</label><select name="vascular_access_type"><option value="">غير محدد</option><option value="av_fistula">AV Fistula</option><option value="av_graft">AV Graft</option><option value="central_venous_catheter">CVC</option></select></div>
+      <div class="field"><label>موضع الوصلة</label><input name="vascular_access_location" placeholder="الذراع / الفخذ / الوداجي / أخرى"></div>
+      <div class="field"><label>تاريخ تركيب الوصلة الحالية</label><input name="vascular_access_placement_date" type="date"></div>
       <div class="field"><label>مرحلة الدراسة</label><select name="study_phase"><option value="post_implementation">بعد التطبيق</option><option value="pre_implementation">قبل التطبيق</option></select></div>
       <div class="field"><label>مجموعة الدراسة</label><select name="study_group"><option value="intervention">تدخل</option><option value="control">ضابطة</option></select></div>
       <div class="field full"><label>ملاحظات سريرية</label><textarea name="baseline_functional_status" placeholder="ملاحظات سريرية"></textarea></div>
@@ -2126,10 +2177,32 @@ function renderPatientCreateForm(route) {
   `);
 }
 
+function renderSessionCreateForm(route) {
+  const patientOptions = appState.patients
+    .filter((patient) => patient.status === "active")
+    .map((patient) => `<option value="${patient.id}">${escapeHtml(patient.patientCode)}</option>`)
+    .join("");
+  return card(route.label, `
+    ${appState.sessionSubmission ? `<div class="state-message empty"><strong>تم حفظ سياق جلسة الغسيل</strong><span>${escapeHtml(appState.sessionSubmission.patientCode || "")} - ${escapeHtml(appState.sessionSubmission.sessionDate || "")}</span></div>` : ""}
+    ${appState.errors.sessionSubmission ? `<div class="state-message error" role="alert"><strong>تعذر حفظ الجلسة</strong><span>${escapeHtml(appState.errors.sessionSubmission)}</span></div>` : ""}
+    <form class="form-grid" onsubmit="submitDialysisSessionCreate(event)">
+      <div class="field full"><strong>سياق جلسة الغسيل</strong></div>
+      <div class="field"><label>المريض</label><select name="patient_id" required>${patientOptions}</select></div>
+      <div class="field"><label>تاريخ الجلسة</label><input name="session_date" type="date" required onchange="deriveSessionWeekday(this.value)"></div>
+      <div class="field"><label>اليوم من الأسبوع</label><input id="sessionWeekdayInput" name="session_day_of_week" placeholder="يحسب تلقائيا عند اختيار التاريخ"></div>
+      <div class="field"><label>توقيت بدء الجلسة الفعلي</label><input name="actual_start_time" type="datetime-local"></div>
+      <div class="field"><label>مدة الجلسة بالدقائق</label><input name="session_duration_minutes" type="number" min="1" max="1440" value="240"></div>
+      <div class="field"><label>كمية سحب السوائل المستهدفة (مل)</label><input name="target_fluid_removal_ml" type="number" min="0" max="10000" step="50"></div>
+      <div class="field"><label>حالة الجلسة</label><select name="session_status">${Object.entries(labels.sessionStatus).map(([value, text]) => `<option value="${value}">${text}</option>`).join("")}</select></div>
+      <div class="footer-actions full"><button class="btn primary" type="submit" ${appState.loading.sessionSubmission ? "disabled" : ""}>${appState.loading.sessionSubmission ? "جاري الحفظ..." : "حفظ الجلسة"}</button><button class="btn" type="button" onclick="setRoute('sessions')">إلغاء</button></div>
+    </form>
+  `);
+}
+
 function renderVitalSignsEntry() {
   const activePatients = appState.patients.filter((patient) => patient.status === "active");
-  const patientOptions = activePatients.map((patient) => `<option value="${patient.id}">${escapeHtml(patient.patientCode)}</option>`).join("");
-  const sessionOptions = appState.dialysisSessions.map((session) => `<option value="${session.id}" data-patient-id="${session.patientId}">${escapeHtml(session.patientCode)} - ${escapeHtml(session.sessionDate)} - ${escapeHtml(label(labels.sessionStatus, session.sessionStatus))}</option>`).join("");
+  const patientOptions = activePatients.map((patient) => `<option value="${patient.id}" data-dry-weight="${escapeHtml(patient.targetDryWeight || "")}">${escapeHtml(patient.patientCode)}</option>`).join("");
+  const sessionOptions = appState.dialysisSessions.map((session) => `<option value="${session.id}" data-patient-id="${session.patientId}" data-target-fluid="${escapeHtml(session.targetFluidRemovalMl || "")}">${escapeHtml(session.patientCode)} - ${escapeHtml(session.sessionDate)} - ${escapeHtml(label(labels.sessionStatus, session.sessionStatus))}</option>`).join("");
   const result = appState.monitoringSubmission?.news2_assessment;
   const success = appState.monitoringSubmission ? `<div class="state-message empty"><strong>تم حفظ القياس وحساب NEWS2 و HD2-mNEWS بنجاح</strong><span>الخادم هو مصدر الحقيقة لنتيجة الخطورة والتنبيه السريري.</span></div>` : "";
   const resultPanel = result ? renderMonitoringResult(result, appState.monitoringSubmission?.alert) : `<p class="kpi-meta">سيظهر مجموع NEWS2 و HD2-mNEWS ومكونات الدرجة بعد حفظ القياس.</p>`;
@@ -2138,8 +2211,8 @@ function renderVitalSignsEntry() {
       ${appState.errors.monitoringSubmission ? `<div class="state-message error" role="alert"><strong>تعذر حفظ القياس</strong><span>${escapeHtml(appState.errors.monitoringSubmission)}</span><span>تأكد من صحة البيانات المدخلة ومن ارتباط الجلسة بالمريض.</span></div>` : ""}
       <form class="form-grid" onsubmit="submitMonitoringMeasurement(event)">
         <div class="field full"><strong>بيانات الجلسة</strong></div>
-        <div class="field"><label>المريض</label><select name="patient_id" required>${patientOptions}</select></div>
-        <div class="field"><label>جلسة الغسيل</label><select name="dialysis_session_id" required>${sessionOptions}</select></div>
+        <div class="field"><label>المريض</label><select id="monitoringPatientSelect" name="patient_id" required onchange="prefillMonitoringContext()">${patientOptions}</select></div>
+        <div class="field"><label>جلسة الغسيل</label><select id="monitoringSessionSelect" name="dialysis_session_id" required onchange="prefillMonitoringContext()">${sessionOptions}</select></div>
         <div class="field"><label>وقت القياس</label><input name="measurement_time" type="datetime-local" value="${defaultMeasurementTime()}" required></div>
         <div class="field"><label>الفاصل الزمني بالدقائق</label><input name="measurement_interval_minutes" type="number" min="1" value="30" required></div>
         <div class="field full"><strong>العلامات الحيوية الأساسية</strong></div>
@@ -2157,9 +2230,9 @@ function renderVitalSignsEntry() {
         <div class="field full"><strong>متغيرات الغسيل الكلوي</strong></div>
         <div class="field"><label>حالة الوصول الوعائي</label><select name="vascular_access_status" required><option value="normal">طبيعي</option><option value="weak">ضعيف</option><option value="disturbed">مضطرب</option><option value="critical">حرج</option></select></div>
         <div class="field"><label>الوزن قبل الجلسة</label><input name="pre_dialysis_weight" type="number" min="1" max="500" step="0.1" value="72" required></div>
-        <div class="field"><label>الوزن الجاف</label><input name="dry_weight" type="number" min="1" max="500" step="0.1" value="70" required></div>
+        <div class="field"><label>الوزن الجاف</label><input id="monitoringDryWeightInput" name="dry_weight" type="number" min="1" max="500" step="0.1" value="70" required></div>
         <div class="field"><label>مدة الجلسة بالساعات</label><input name="session_duration_hours" type="number" min="0.5" max="24" step="0.25" value="4" required></div>
-        <div class="field"><label>كمية السوائل المطلوب سحبها (مل)</label><input name="fluid_to_remove" type="number" min="0" max="10000" step="50" value="2000" required></div>
+        <div class="field"><label>كمية السوائل المطلوب سحبها (مل)</label><input id="monitoringFluidRemovalInput" name="fluid_to_remove" type="number" min="0" max="10000" step="50" value="2000" required></div>
         <div class="field"><label>بوتاسيوم الدم K+</label><input name="potassium" type="number" min="0.1" max="12" step="0.1" value="4.5" required></div>
         <input name="recorded_by_user_id" type="hidden" value="3">
         <div class="footer-actions full"><button class="btn primary" type="submit" ${appState.loading.monitoringSubmission ? "disabled" : ""}>${appState.loading.monitoringSubmission ? "جاري الحفظ..." : "حفظ القياس وحساب HD2-mNEWS"}</button></div>
@@ -2249,7 +2322,13 @@ function renderProfile() {
       ["مرحلة الدراسة", label(labels.studyPhase, patient.studyPhase)],
       ["مجموعة الدراسة", label(labels.studyGroup, patient.studyGroup)],
       ["مدة الغسيل بالشهور", patient.dialysisVintageMonths],
-      ["جلسات أسبوعية", patient.weeklySessionsCount]
+      ["جلسات أسبوعية", patient.weeklySessionsCount],
+      ["المستوى التعليمي", patient.educationLevel || "-"],
+      ["وزن الجفاف", patient.targetDryWeight || "-"],
+      ["تاريخ بدء الغسيل", patient.dialysisStartDate || "-"],
+      ["نوع الوصلة", vascularAccessTypeLabel(patient.vascularAccessType)],
+      ["موضع الوصلة", patient.vascularAccessLocation || "-"],
+      ["تاريخ تركيب الوصلة", patient.vascularAccessPlacementDate || "-"]
     ].map(([a, b]) => `<div class="summary-cell"><span>${escapeHtml(a)}</span><strong>${escapeHtml(b)}</strong></div>`).join("")}</div>`)}
     <div class="grid cols-2" style="margin-top:16px">
       ${card("اتجاه NEWS2", news2Scores.length ? renderBarChart(news2Scores) : emptyBlock("لا توجد قراءات NEWS2 لهذا المريض حتى الآن"))}
@@ -2263,11 +2342,29 @@ function renderProfile() {
 }
 
 function renderBaseline() {
-  return `<div class="grid cols-2">${card("القيم المرجعية", renderTable(["المؤشر", "القيمة المرجعية", "آخر قراءة", "التقييم"], [["ضغط الدم", "135/82", "118/70", "انخفاض"], ["النبض", "78", "96", "ارتفاع"], ["تشبع الأكسجين", "96%", "91%", "متابعة"]]))}${card("سياق سريري", renderFormText(["الأمراض المصاحبة", "الأدوية المؤثرة", "ملاحظات خط الأساس"]))}</div>`;
+  const patients = appState.patients;
+  const rows = patients.map((patient) => [
+    patient.patientCode,
+    patient.age,
+    label(labels.gender, patient.gender),
+    patient.educationLevel || "-",
+    patient.targetDryWeight || "-",
+    patient.weeklySessionsCount || "-",
+    vascularAccessTypeLabel(patient.vascularAccessType),
+    patient.vascularAccessLocation || "-"
+  ]);
+  return `<div class="grid cols-2">
+    ${card("الملف الأساسي للمريض", rows.length ? renderTable(["الرقم الطبي", "العمر", "الجنس", "التعليم", "وزن الجفاف", "جلسات أسبوعية", "نوع الوصلة", "الموضع"], rows) : emptyBlock("لا توجد بيانات مرضى نشطة"))}
+    ${card("الأمراض المصاحبة", patients.length ? renderTable(["المريض", "قصور القلب", "السكري", "ضغط الدم", "ملاحظات"], patients.map((patient) => [patient.patientCode, yesNo(patient.comorbidHeartFailure), yesNo(patient.comorbidDiabetes), yesNo(patient.comorbidHypertension), patient.comorbiditiesNotes || patient.comorbidities || "-"])) : emptyBlock("لا توجد أمراض مصاحبة موثقة"))}
+  </div>`;
 }
 
 function renderVascular() {
   return `<div class="grid cols-3">${renderKpi(["نوع الوصول", "CVC", "قسطرة وريدية مركزية", "warning"])}${renderKpi(["تقييم العدوى", "متوسط", "يحتاج متابعة", "warning"])}${renderKpi(["كفاءة التدفق", "82%", "مقبول", "success"])}</div><div style="margin-top:16px">${card("توثيق الوصول الوعائي", renderFormText(["موقع الوصول", "حالة الجلد", "معدل التدفق", "ملاحظات التمريض"]))}</div>`;
+}
+
+function vascularAccessTypeLabel(value) {
+  return label({ av_fistula: "AV Fistula", av_graft: "AV Graft", central_venous_catheter: "CVC", cvc: "CVC" }, value || "");
 }
 
 function renderDetails(route) {
@@ -2432,6 +2529,25 @@ function defaultMeasurementTime() {
   return date.toISOString().slice(0, 16);
 }
 
+function prefillMonitoringContext() {
+  const patientSelect = document.getElementById("monitoringPatientSelect");
+  const sessionSelect = document.getElementById("monitoringSessionSelect");
+  const dryWeightInput = document.getElementById("monitoringDryWeightInput");
+  const fluidRemovalInput = document.getElementById("monitoringFluidRemovalInput");
+  const dryWeight = patientSelect?.selectedOptions?.[0]?.dataset?.dryWeight;
+  const targetFluid = sessionSelect?.selectedOptions?.[0]?.dataset?.targetFluid;
+  if (dryWeight && dryWeightInput) dryWeightInput.value = dryWeight;
+  if (targetFluid && fluidRemovalInput) fluidRemovalInput.value = targetFluid;
+}
+
+function deriveSessionWeekday(value) {
+  const input = document.getElementById("sessionWeekdayInput");
+  if (!input || !value) return;
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return;
+  input.value = date.toLocaleDateString("ar", { weekday: "long" });
+}
+
 async function submitMonitoringMeasurement(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -2472,6 +2588,33 @@ async function submitMonitoringMeasurement(event) {
     appState.errors.monitoringSubmission = error.message || "تعذر حفظ القياس";
   } finally {
     appState.loading.monitoringSubmission = false;
+    render();
+  }
+}
+
+async function submitDialysisSessionCreate(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  appState.loading.sessionSubmission = true;
+  appState.errors.sessionSubmission = null;
+  appState.sessionSubmission = null;
+  render();
+  try {
+    const actualStartTime = data.get("actual_start_time");
+    appState.sessionSubmission = await api.createDialysisSession(compactObject({
+      patient_id: Number(data.get("patient_id")),
+      session_date: data.get("session_date"),
+      session_day_of_week: data.get("session_day_of_week") || null,
+      actual_start_time: actualStartTime ? new Date(actualStartTime).toISOString() : null,
+      session_duration_minutes: data.get("session_duration_minutes") ? Number(data.get("session_duration_minutes")) : null,
+      target_fluid_removal_ml: data.get("target_fluid_removal_ml") ? Number(data.get("target_fluid_removal_ml")) : null,
+      session_status: data.get("session_status") || "scheduled"
+    }));
+    appState.dialysisSessions = await api.getDialysisSessions();
+  } catch (error) {
+    appState.errors.sessionSubmission = error.message || "تعذر حفظ الجلسة";
+  } finally {
+    appState.loading.sessionSubmission = false;
     render();
   }
 }
@@ -3563,6 +3706,7 @@ function render() {
 window.setRoute = setRoute;
 window.calculateNews2Demo = calculateNews2Demo;
 window.submitPatientCreate = submitPatientCreate;
+window.submitDialysisSessionCreate = submitDialysisSessionCreate;
 window.submitStaffUser = submitStaffUser;
 window.toggleStaffUserStatus = toggleStaffUserStatus;
 window.submitMonitoringMeasurement = submitMonitoringMeasurement;
@@ -3583,6 +3727,8 @@ window.handleActionKey = handleActionKey;
 window.selectPatientProfile = selectPatientProfile;
 window.showPatientProfileSelector = showPatientProfileSelector;
 window.filterPatientProfileSelector = filterPatientProfileSelector;
+window.prefillMonitoringContext = prefillMonitoringContext;
+window.deriveSessionWeekday = deriveSessionWeekday;
 window.openSidebar = openSidebar;
 window.closeSidebar = closeSidebar;
 window.toggleSidebar = toggleSidebar;

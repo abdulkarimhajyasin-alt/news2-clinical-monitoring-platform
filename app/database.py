@@ -91,3 +91,26 @@ def ensure_runtime_columns() -> None:
             for column_name, sql_type in hd2_columns.items():
                 if column_name not in table_columns:
                     connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {sql_type}"))
+
+        baseline_columns_by_table = {
+            "patients": {
+                "education_level": "VARCHAR(80)",
+                "comorbid_heart_failure": "BOOLEAN",
+                "comorbid_diabetes": "BOOLEAN",
+                "comorbid_hypertension": "BOOLEAN",
+                "comorbidities_notes": "TEXT",
+                "vascular_access_type": "VARCHAR(60)",
+                "vascular_access_location": "VARCHAR(120)",
+                "vascular_access_placement_date": "DATE",
+            },
+            "dialysis_sessions": {
+                "target_fluid_removal_ml": "FLOAT",
+            },
+        }
+        for table_name, baseline_columns in baseline_columns_by_table.items():
+            if table_name not in table_names:
+                continue
+            table_columns = {column["name"] for column in inspector.get_columns(table_name)}
+            for column_name, sql_type in baseline_columns.items():
+                if column_name not in table_columns:
+                    connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {sql_type}"))

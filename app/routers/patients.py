@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.rbac import CurrentUserContext, require_permission
-from app.schemas import PatientArchiveRequest, PatientCreate, PatientCreateResult, PatientDeleteRequest, PatientDischargeRequest, PatientLifecycleResult, PatientRead
+from app.schemas import PatientArchiveRequest, PatientCreate, PatientCreateResult, PatientDeleteRequest, PatientDischargeRequest, PatientLifecycleResult, PatientRead, PatientUpdate
 from app.services.patient_lifecycle_service import (
     PatientDeleteConfirmationError,
     PatientDeletedError,
@@ -14,7 +14,7 @@ from app.services.patient_lifecycle_service import (
     restore_patient,
     soft_delete_patient,
 )
-from app.services.patient_service import PatientCodeExistsError, create_patient, list_patients
+from app.services.patient_service import PatientCodeExistsError, create_patient, list_patients, update_patient
 
 router = APIRouter(prefix="/api/patients", tags=["patients"])
 
@@ -49,6 +49,19 @@ def create_patient_record(
     except PatientCodeExistsError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return {"patient": patient, "patient_created": True, "message": "patient_created"}
+
+
+@router.patch("/{patient_id}", response_model=PatientRead)
+def update_patient_record(
+    patient_id: int,
+    payload: PatientUpdate,
+    db: Session = Depends(get_db),
+    _current_user=Depends(require_permission("patients:update")),
+):
+    patient = update_patient(db, patient_id, payload)
+    if patient is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+    return patient
 
 
 @router.post("/{patient_id}/discharge", response_model=PatientLifecycleResult)

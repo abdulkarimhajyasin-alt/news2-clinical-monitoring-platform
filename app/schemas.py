@@ -137,13 +137,28 @@ class PatientRead(BaseModel):
 
     id: int
     patient_code: str
+    medical_code: str | None = None
     full_name: str
     age: int
     gender: str
+    education_level: str | None = None
+    target_dry_weight: float | None = None
+    dry_weight_kg: float | None = None
+    dialysis_start_date: date | None = None
+    weekly_sessions_count: int | None = None
+    weekly_dialysis_sessions: int | None = None
+    comorbidities: str | None = None
+    comorbid_heart_failure: bool | None = None
+    comorbid_diabetes: bool | None = None
+    comorbid_hypertension: bool | None = None
+    comorbidities_notes: str | None = None
+    vascular_access_type: str | None = None
+    vascular_access_location: str | None = None
+    vascular_access_placement_date: date | None = None
     study_phase: str
     study_group: str
     dialysis_vintage_months: int | None = None
-    weekly_sessions_count: int | None = None
+    baseline_functional_status: str | None = None
     is_anonymized: bool
     status: str = "active"
     discharged_at: datetime | None = None
@@ -161,13 +176,23 @@ class PatientCreate(BaseModel):
     full_name: str = Field(min_length=2, max_length=160)
     age: int = Field(ge=0, le=130)
     gender: Literal["male", "female"]
+    education_level: str | None = Field(default=None, max_length=80)
     target_dry_weight: float | None = Field(default=None, gt=0, le=500)
+    dry_weight_kg: float | None = Field(default=None, gt=0, le=500)
     dialysis_start_date: date | None = None
     dialysis_vintage_months: int | None = Field(default=None, ge=0, le=1200)
-    weekly_sessions_count: int | None = Field(default=3, ge=1, le=14)
+    weekly_sessions_count: int | None = Field(default=3, ge=1, le=7)
+    weekly_dialysis_sessions: int | None = Field(default=None, ge=1, le=7)
     comorbidities: str | None = Field(default=None, max_length=4000)
+    comorbid_heart_failure: bool | None = None
+    comorbid_diabetes: bool | None = None
+    comorbid_hypertension: bool | None = None
+    comorbidities_notes: str | None = Field(default=None, max_length=4000)
     charlson_comorbidity_index: int | None = Field(default=None, ge=0, le=40)
     baseline_functional_status: str | None = Field(default=None, max_length=4000)
+    vascular_access_type: Literal["av_fistula", "av_graft", "cvc", "central_venous_catheter"] | None = None
+    vascular_access_location: str | None = Field(default=None, max_length=120)
+    vascular_access_placement_date: date | None = None
     study_phase: Literal["pre_implementation", "post_implementation"] = "post_implementation"
     study_group: Literal["control", "intervention"] = "intervention"
     is_anonymized: bool = True
@@ -177,10 +202,54 @@ class PatientCreate(BaseModel):
     def normalize_patient_code(cls, value: str) -> str:
         return value.strip().upper()
 
-    @field_validator("full_name", "comorbidities", "baseline_functional_status")
+    @field_validator("full_name", "education_level", "comorbidities", "comorbidities_notes", "baseline_functional_status", "vascular_access_location")
     @classmethod
     def strip_patient_text(cls, value: str | None) -> str | None:
         return value.strip() if isinstance(value, str) else value
+
+    def model_post_init(self, __context) -> None:
+        if self.dry_weight_kg is not None and self.target_dry_weight is None:
+            self.target_dry_weight = self.dry_weight_kg
+        if self.weekly_dialysis_sessions is not None:
+            self.weekly_sessions_count = self.weekly_dialysis_sessions
+        if self.vascular_access_type == "cvc":
+            self.vascular_access_type = "central_venous_catheter"
+
+
+class PatientUpdate(BaseModel):
+    full_name: str | None = Field(default=None, min_length=2, max_length=160)
+    age: int | None = Field(default=None, ge=0, le=130)
+    gender: Literal["male", "female"] | None = None
+    education_level: str | None = Field(default=None, max_length=80)
+    target_dry_weight: float | None = Field(default=None, gt=0, le=500)
+    dry_weight_kg: float | None = Field(default=None, gt=0, le=500)
+    dialysis_start_date: date | None = None
+    dialysis_vintage_months: int | None = Field(default=None, ge=0, le=1200)
+    weekly_sessions_count: int | None = Field(default=None, ge=1, le=7)
+    weekly_dialysis_sessions: int | None = Field(default=None, ge=1, le=7)
+    comorbidities: str | None = Field(default=None, max_length=4000)
+    comorbid_heart_failure: bool | None = None
+    comorbid_diabetes: bool | None = None
+    comorbid_hypertension: bool | None = None
+    comorbidities_notes: str | None = Field(default=None, max_length=4000)
+    charlson_comorbidity_index: int | None = Field(default=None, ge=0, le=40)
+    baseline_functional_status: str | None = Field(default=None, max_length=4000)
+    vascular_access_type: Literal["av_fistula", "av_graft", "cvc", "central_venous_catheter"] | None = None
+    vascular_access_location: str | None = Field(default=None, max_length=120)
+    vascular_access_placement_date: date | None = None
+
+    @field_validator("full_name", "education_level", "comorbidities", "comorbidities_notes", "baseline_functional_status", "vascular_access_location")
+    @classmethod
+    def strip_update_patient_text(cls, value: str | None) -> str | None:
+        return value.strip() if isinstance(value, str) else value
+
+    def model_post_init(self, __context) -> None:
+        if self.dry_weight_kg is not None and self.target_dry_weight is None:
+            self.target_dry_weight = self.dry_weight_kg
+        if self.weekly_dialysis_sessions is not None:
+            self.weekly_sessions_count = self.weekly_dialysis_sessions
+        if self.vascular_access_type == "cvc":
+            self.vascular_access_type = "central_venous_catheter"
 
 
 class PatientCreateResult(BaseModel):
@@ -224,16 +293,63 @@ class PatientLifecycleResult(BaseModel):
 
 
 class DialysisSessionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     patient_id: int
     patient_code: str | None = None
     session_date: date
     weekday: str | None = None
+    session_day_of_week: str | None = None
     actual_start_time: datetime | None = None
     actual_end_time: datetime | None = None
     session_status: str
     target_ultrafiltration: float | None = None
+    target_fluid_removal_ml: float | None = None
     session_duration_minutes: int | None = None
+
+
+class DialysisSessionCreate(BaseModel):
+    patient_id: int = Field(gt=0)
+    session_date: date
+    weekday: str | None = Field(default=None, max_length=20)
+    session_day_of_week: str | None = Field(default=None, max_length=20)
+    actual_start_time: datetime | None = None
+    actual_end_time: datetime | None = None
+    session_status: str = Field(default="scheduled", max_length=40)
+    target_ultrafiltration: float | None = Field(default=None, ge=0, le=100)
+    target_fluid_removal_ml: float | None = Field(default=None, ge=0, le=10000)
+    session_duration_minutes: int | None = Field(default=None, ge=1, le=1440)
+
+    @field_validator("weekday", "session_day_of_week", "session_status")
+    @classmethod
+    def strip_session_text(cls, value: str | None) -> str | None:
+        return value.strip() if isinstance(value, str) else value
+
+    def model_post_init(self, __context) -> None:
+        if self.session_day_of_week and not self.weekday:
+            self.weekday = self.session_day_of_week
+
+
+class DialysisSessionUpdate(BaseModel):
+    session_date: date | None = None
+    weekday: str | None = Field(default=None, max_length=20)
+    session_day_of_week: str | None = Field(default=None, max_length=20)
+    actual_start_time: datetime | None = None
+    actual_end_time: datetime | None = None
+    session_status: str | None = Field(default=None, max_length=40)
+    target_ultrafiltration: float | None = Field(default=None, ge=0, le=100)
+    target_fluid_removal_ml: float | None = Field(default=None, ge=0, le=10000)
+    session_duration_minutes: int | None = Field(default=None, ge=1, le=1440)
+
+    @field_validator("weekday", "session_day_of_week", "session_status")
+    @classmethod
+    def strip_update_session_text(cls, value: str | None) -> str | None:
+        return value.strip() if isinstance(value, str) else value
+
+    def model_post_init(self, __context) -> None:
+        if self.session_day_of_week and not self.weekday:
+            self.weekday = self.session_day_of_week
 
 
 class AlertRead(BaseModel):

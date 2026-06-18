@@ -137,13 +137,21 @@ class Patient(Base, TimestampMixin, LockMixin):
     full_name: Mapped[str] = mapped_column(String(160), nullable=False)
     age: Mapped[int] = mapped_column(Integer, nullable=False)
     gender: Mapped[str] = mapped_column(String(20), nullable=False)
+    education_level: Mapped[str | None] = mapped_column(String(80))
     target_dry_weight: Mapped[float | None] = mapped_column(Float)
     dialysis_start_date: Mapped[date | None] = mapped_column(Date)
     dialysis_vintage_months: Mapped[int | None] = mapped_column(Integer)
     weekly_sessions_count: Mapped[int | None] = mapped_column(Integer)
     comorbidities: Mapped[str | None] = mapped_column(Text)
+    comorbid_heart_failure: Mapped[bool | None] = mapped_column(Boolean)
+    comorbid_diabetes: Mapped[bool | None] = mapped_column(Boolean)
+    comorbid_hypertension: Mapped[bool | None] = mapped_column(Boolean)
+    comorbidities_notes: Mapped[str | None] = mapped_column(Text)
     charlson_comorbidity_index: Mapped[int | None] = mapped_column(Integer)
     baseline_functional_status: Mapped[str | None] = mapped_column(Text)
+    vascular_access_type: Mapped[str | None] = mapped_column(String(60))
+    vascular_access_location: Mapped[str | None] = mapped_column(String(120))
+    vascular_access_placement_date: Mapped[date | None] = mapped_column(Date)
     study_phase: Mapped[str] = mapped_column(String(40), nullable=False)
     study_group: Mapped[str] = mapped_column(String(40), nullable=False)
     is_anonymized: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -164,6 +172,18 @@ class Patient(Base, TimestampMixin, LockMixin):
     alerts: Mapped[list["Alert"]] = relationship(back_populates="patient")
     deterioration_events: Mapped[list["ClinicalDeteriorationEvent"]] = relationship(back_populates="patient")
     outcomes: Mapped[list["ClinicalOutcome"]] = relationship(back_populates="patient")
+
+    @property
+    def medical_code(self) -> str:
+        return self.patient_code
+
+    @property
+    def dry_weight_kg(self) -> float | None:
+        return self.target_dry_weight
+
+    @property
+    def weekly_dialysis_sessions(self) -> int | None:
+        return self.weekly_sessions_count
 
 
 class PatientVascularAccess(Base, TimestampMixin, LockMixin):
@@ -189,6 +209,7 @@ class DialysisSession(Base, TimestampMixin, LockMixin):
     actual_start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     actual_end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     target_ultrafiltration: Mapped[float | None] = mapped_column(Float)
+    target_fluid_removal_ml: Mapped[float | None] = mapped_column(Float)
     blood_flow_rate: Mapped[int | None] = mapped_column(Integer)
     dialysate_flow_rate: Mapped[int | None] = mapped_column(Integer)
     dialysate_temperature: Mapped[float | None] = mapped_column(Float)
@@ -204,6 +225,10 @@ class DialysisSession(Base, TimestampMixin, LockMixin):
     measurements: Mapped[list["IntradialyticMeasurement"]] = relationship(back_populates="dialysis_session")
     news2_assessments: Mapped[list["News2Assessment"]] = relationship(back_populates="dialysis_session")
     alerts: Mapped[list["Alert"]] = relationship(back_populates="dialysis_session")
+
+    @property
+    def session_day_of_week(self) -> str | None:
+        return self.weekday
 
 
 class IntradialyticMeasurement(Base):

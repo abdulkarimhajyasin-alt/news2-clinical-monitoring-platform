@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.models import Patient
-from app.schemas import PatientCreate
+from app.schemas import PatientCreate, PatientUpdate
 
 
 class PatientCodeExistsError(ValueError):
@@ -35,7 +35,7 @@ def create_patient(db: Session, payload: PatientCreate) -> Patient:
     if existing:
         raise PatientCodeExistsError("patient_code already exists")
 
-    values = payload.model_dump()
+    values = _patient_model_values(payload.model_dump())
     values["study_phase"] = values.get("study_phase") or "post_implementation"
     values["study_group"] = values.get("study_group") or "intervention"
     values["is_anonymized"] = True if values.get("is_anonymized") is None else values["is_anonymized"]
@@ -44,3 +44,24 @@ def create_patient(db: Session, payload: PatientCreate) -> Patient:
     db.commit()
     db.refresh(patient)
     return patient
+
+
+def update_patient(db: Session, patient_id: int, payload: PatientUpdate) -> Patient | None:
+    patient = db.get(Patient, patient_id)
+    if patient is None:
+        return None
+    values = _patient_model_values(payload.model_dump(exclude_unset=True))
+    for field, value in values.items():
+        setattr(patient, field, value)
+    db.commit()
+    db.refresh(patient)
+    return patient
+
+
+def _patient_model_values(values: dict[str, object]) -> dict[str, object]:
+    values = dict(values)
+    values.pop("dry_weight_kg", None)
+    values.pop("weekly_dialysis_sessions", None)
+    if values.get("vascular_access_type") == "cvc":
+        values["vascular_access_type"] = "central_venous_catheter"
+    return values
