@@ -691,6 +691,15 @@ function normalizeMeasurement(row) {
     temperature: row.temperature,
     consciousnessLevel: row.consciousness_level,
     confusionStatus: row.confusion_status,
+    vascularAccessStatus: row.vascular_access_status,
+    preDialysisWeight: row.pre_dialysis_weight,
+    dryWeight: row.dry_weight,
+    sessionDurationHours: row.session_duration_hours,
+    fluidToRemove: row.fluid_to_remove,
+    potassium: row.potassium,
+    idwgPercent: row.idwg_percent,
+    ufr: row.ufr,
+    sbpSymptomaticHypotension: row.sbp_symptomatic_hypotension,
     recordedByUserId: row.recorded_by_user_id,
     createdAt: row.created_at
   };
@@ -714,6 +723,12 @@ function normalizeNews2Assessment(row) {
     alertRequired: row.alert_required,
     singleParameterTrigger: row.single_parameter_trigger,
     triggerReason: row.trigger_reason,
+    hd2TotalScore: row.hd2_mnews_total_score,
+    hd2RiskColor: row.hd2_mnews_risk_color,
+    hd2RiskLabelAr: row.hd2_mnews_risk_label_ar,
+    hd2CriticalTrigger: row.hd2_mnews_critical_trigger,
+    hd2CriticalReasons: row.hd2_mnews_critical_reasons || [],
+    hd2Breakdown: row.hd2_mnews_breakdown,
     createdAt: row.created_at
   };
 }
@@ -2116,18 +2131,20 @@ function renderVitalSignsEntry() {
   const patientOptions = activePatients.map((patient) => `<option value="${patient.id}">${escapeHtml(patient.patientCode)}</option>`).join("");
   const sessionOptions = appState.dialysisSessions.map((session) => `<option value="${session.id}" data-patient-id="${session.patientId}">${escapeHtml(session.patientCode)} - ${escapeHtml(session.sessionDate)} - ${escapeHtml(label(labels.sessionStatus, session.sessionStatus))}</option>`).join("");
   const result = appState.monitoringSubmission?.news2_assessment;
-  const success = appState.monitoringSubmission ? `<div class="state-message empty"><strong>تم حفظ القياس وحساب NEWS2 بنجاح</strong><span>تم إنشاء سجل قياس وسجل تقييم NEWS2 دون إنشاء تنبيه آلي في هذه المرحلة.</span></div>` : "";
-  const resultPanel = result ? renderMonitoringResult(result, appState.monitoringSubmission?.alert) : `<p class="kpi-meta">سيظهر مجموع NEWS2 ومكونات الدرجة بعد حفظ القياس.</p>`;
+  const success = appState.monitoringSubmission ? `<div class="state-message empty"><strong>تم حفظ القياس وحساب NEWS2 و HD2-mNEWS بنجاح</strong><span>الخادم هو مصدر الحقيقة لنتيجة الخطورة والتنبيه السريري.</span></div>` : "";
+  const resultPanel = result ? renderMonitoringResult(result, appState.monitoringSubmission?.alert) : `<p class="kpi-meta">سيظهر مجموع NEWS2 و HD2-mNEWS ومكونات الدرجة بعد حفظ القياس.</p>`;
   return `<div class="grid cols-2">
-    ${card("إدخال العلامات الحيوية", `
+    ${card("نموذج المراقبة الرقمية", `
       ${appState.errors.monitoringSubmission ? `<div class="state-message error" role="alert"><strong>تعذر حفظ القياس</strong><span>${escapeHtml(appState.errors.monitoringSubmission)}</span><span>تأكد من صحة البيانات المدخلة ومن ارتباط الجلسة بالمريض.</span></div>` : ""}
       <form class="form-grid" onsubmit="submitMonitoringMeasurement(event)">
+        <div class="field full"><strong>بيانات الجلسة</strong></div>
         <div class="field"><label>المريض</label><select name="patient_id" required>${patientOptions}</select></div>
         <div class="field"><label>جلسة الغسيل</label><select name="dialysis_session_id" required>${sessionOptions}</select></div>
         <div class="field"><label>وقت القياس</label><input name="measurement_time" type="datetime-local" value="${defaultMeasurementTime()}" required></div>
         <div class="field"><label>الفاصل الزمني بالدقائق</label><input name="measurement_interval_minutes" type="number" min="1" value="30" required></div>
+        <div class="field full"><strong>العلامات الحيوية الأساسية</strong></div>
         <div class="field"><label>معدل التنفس</label><input name="respiratory_rate" type="number" min="1" value="18" required></div>
-        <div class="field"><label>تشبع الأوكسجين SpO2</label><input name="spo2" type="number" min="0" max="100" value="95" required></div>
+        <div class="field"><label>تشبع الأوكسجين SpO2</label><input name="spo2" type="number" min="0" max="100" value="96" required></div>
         <div class="field"><label>هل يتلقى أوكسجين؟</label><select name="oxygen_therapy"><option value="false">لا</option><option value="true">نعم</option></select></div>
         <div class="field"><label>ضغط الدم الانقباضي</label><input name="systolic_bp" type="number" min="1" value="125" required></div>
         <div class="field"><label>ضغط الدم الانبساطي</label><input name="diastolic_bp" type="number" min="1" value="75" required></div>
@@ -2136,11 +2153,19 @@ function renderVitalSignsEntry() {
         <div class="field"><label>مستوى الوعي</label><select name="consciousness_level">${Object.entries(labels.consciousness).map(([value, text]) => `<option value="${value}">${text}</option>`).join("")}</select></div>
         <div class="field"><label>وجود ارتباك حديث</label><select name="confusion_status"><option value="false">لا</option><option value="true">نعم</option></select></div>
         <div class="field"><label>مقياس SpO2</label><select name="spo2_scale"><option value="scale_1">Scale 1</option><option value="scale_2">Scale 2 - مراجعة سريرية</option></select></div>
+        <div class="field"><label>أعراض هبوط ضغط شديد</label><select name="sbp_symptomatic_hypotension"><option value="false">لا</option><option value="true">نعم</option></select></div>
+        <div class="field full"><strong>متغيرات الغسيل الكلوي</strong></div>
+        <div class="field"><label>حالة الوصول الوعائي</label><select name="vascular_access_status" required><option value="normal">طبيعي</option><option value="weak">ضعيف</option><option value="disturbed">مضطرب</option><option value="critical">حرج</option></select></div>
+        <div class="field"><label>الوزن قبل الجلسة</label><input name="pre_dialysis_weight" type="number" min="1" max="500" step="0.1" value="72" required></div>
+        <div class="field"><label>الوزن الجاف</label><input name="dry_weight" type="number" min="1" max="500" step="0.1" value="70" required></div>
+        <div class="field"><label>مدة الجلسة بالساعات</label><input name="session_duration_hours" type="number" min="0.5" max="24" step="0.25" value="4" required></div>
+        <div class="field"><label>كمية السوائل المطلوب سحبها (مل)</label><input name="fluid_to_remove" type="number" min="0" max="10000" step="50" value="2000" required></div>
+        <div class="field"><label>بوتاسيوم الدم K+</label><input name="potassium" type="number" min="0.1" max="12" step="0.1" value="4.5" required></div>
         <input name="recorded_by_user_id" type="hidden" value="3">
-        <div class="footer-actions full"><button class="btn primary" type="submit" ${appState.loading.monitoringSubmission ? "disabled" : ""}>${appState.loading.monitoringSubmission ? "جاري الحفظ..." : "حفظ القياس وحساب NEWS2"}</button></div>
+        <div class="footer-actions full"><button class="btn primary" type="submit" ${appState.loading.monitoringSubmission ? "disabled" : ""}>${appState.loading.monitoringSubmission ? "جاري الحفظ..." : "حفظ القياس وحساب HD2-mNEWS"}</button></div>
       </form>
     `)}
-    ${card("نتيجة NEWS2", `${success}${resultPanel}`)}
+    ${card("نتيجة HD2-mNEWS", `${success}${resultPanel}`)}
   </div>`;
 }
 
@@ -2353,7 +2378,8 @@ function renderMonitoringResult(result, alert) {
   const alertSummary = alert
     ? `<div class="state-message empty"><strong>${alert.alert_created ? "تم إنشاء تنبيه سريري" : "تم استخدام تنبيه نشط قائم"}</strong><span>المعرف: ${escapeHtml(alert.alert_id || "-")} - الأولوية: ${escapeHtml(priorityLabel(alert.priority))} - الحالة: ${escapeHtml(label(labels.status, alert.status))}</span></div>`
     : `<div class="state-message empty"><strong>لا يوجد تنبيه آلي</strong><span>درجة NEWS2 لا تحقق قواعد إنشاء التنبيه في هذه المرحلة.</span></div>`;
-  return `${renderKpi(["الدرجة الكلية", result.total_score, riskLevelLabel(result.risk_level), riskTone(result.risk_level)], result.alert_required)}
+  return `${result.hd2TotalScore !== null && result.hd2TotalScore !== undefined ? renderHD2MNEWSResult(result) : ""}
+    ${renderKpi(["درجة NEWS2", result.total_score, riskLevelLabel(result.risk_level), riskTone(result.risk_level)], result.alert_required)}
     ${alertSummary}
     <div class="patient-summary">
       <div class="summary-cell"><span>مستوى الخطورة</span><strong>${riskLevelLabel(result.risk_level)}</strong></div>
@@ -2370,6 +2396,34 @@ function renderMonitoringResult(result, alert) {
       ["درجة الحرارة", result.temperature_score],
       ["الوعي", result.consciousness_score]
     ])}</div>`;
+}
+
+function renderHD2MNEWSResult(result) {
+  const breakdown = result.hd2Breakdown || {};
+  const riskToneMap = { green: "success", yellow: "warning", red: "danger" };
+  const components = [
+    ["التنفس", breakdown.respiratory_rate_score],
+    ["SpO2", breakdown.oxygen_saturation_score],
+    ["الحرارة", breakdown.temperature_score],
+    ["الضغط الانقباضي", breakdown.systolic_bp_score],
+    ["النبض", breakdown.heart_rate_score],
+    ["الوعي", breakdown.consciousness_score],
+    ["الوصول الوعائي", breakdown.vascular_access_score],
+    ["IDWG%", breakdown.idwg_score],
+    ["UFR", breakdown.ufr_score],
+    ["البوتاسيوم", breakdown.potassium_score]
+  ];
+  const criticalReasons = (result.hd2CriticalReasons || []).length ? result.hd2CriticalReasons.join("، ") : "لا يوجد";
+  return `<div class="grid cols-3" style="margin-bottom:16px">
+      ${renderKpi(["HD2-mNEWS", result.hd2TotalScore, "النطاق المعتمد 0-33", riskToneMap[result.hd2RiskColor] || "info"], result.hd2RiskColor === "red")}
+      ${renderKpi(["لون الخطورة", result.hd2RiskLabelAr || "-", result.hd2CriticalTrigger ? "أحمر تلقائي" : "حسب المجموع", riskToneMap[result.hd2RiskColor] || "info"], result.hd2RiskColor === "red")}
+      ${renderKpi(["IDWG / UFR", `${breakdown.idwg_percent ?? "-"}% / ${breakdown.ufr ?? "-"}`, "قيم مشتقة", "info"])}
+    </div>
+    <div class="patient-summary" style="margin-bottom:16px">
+      <div class="summary-cell"><span>محفز حرج</span><strong>${result.hd2CriticalTrigger ? "نعم" : "لا"}</strong></div>
+      <div class="summary-cell"><span>أسباب الأحمر التلقائي</span><strong>${escapeHtml(criticalReasons)}</strong></div>
+    </div>
+    <div style="margin-bottom:16px">${renderTable(["مكون HD2-mNEWS", "النقاط"], components.map(([name, score]) => [name, score ?? "-"]))}</div>`;
 }
 
 function defaultMeasurementTime() {
@@ -2401,6 +2455,13 @@ async function submitMonitoringMeasurement(event) {
       consciousness_level: data.get("consciousness_level"),
       confusion_status: data.get("confusion_status") === "true",
       spo2_scale: data.get("spo2_scale"),
+      vascular_access_status: data.get("vascular_access_status"),
+      pre_dialysis_weight: Number(data.get("pre_dialysis_weight")),
+      dry_weight: Number(data.get("dry_weight")),
+      session_duration_hours: Number(data.get("session_duration_hours")),
+      fluid_to_remove: Number(data.get("fluid_to_remove")),
+      potassium: Number(data.get("potassium")),
+      sbp_symptomatic_hypotension: data.get("sbp_symptomatic_hypotension") === "true",
       recorded_by_user_id: Number(data.get("recorded_by_user_id"))
     });
     appState.monitoringMeasurements = await api.getMonitoringMeasurements();

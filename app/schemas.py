@@ -326,6 +326,50 @@ class NEWS2CalculationResult(NEWS2ComponentScores):
     trigger_reason: str
 
 
+class HD2MNEWSCalculationRequest(BaseModel):
+    respiratory_rate: int = Field(gt=0, le=80)
+    oxygen_saturation: int = Field(ge=0, le=100)
+    temperature: float = Field(ge=25.0, le=45.0)
+    systolic_bp: int = Field(gt=0, le=300)
+    heart_rate: int = Field(gt=0, le=300)
+    consciousness_level: Literal["alert", "voice", "pain", "unresponsive", "new_confusion"]
+    vascular_access_status: Literal["normal", "weak", "disturbed", "critical"]
+    pre_dialysis_weight: float = Field(gt=0, le=500)
+    dry_weight: float = Field(gt=0, le=500)
+    session_duration_hours: float = Field(gt=0, le=24)
+    fluid_to_remove: float = Field(ge=0, le=10000)
+    potassium: float = Field(gt=0, le=12)
+    sbp_symptomatic_hypotension: bool = False
+
+    @field_validator("temperature", "pre_dialysis_weight", "dry_weight", "session_duration_hours", "fluid_to_remove", "potassium")
+    @classmethod
+    def validate_hd2_numeric_precision(cls, value: float) -> float:
+        return round(value, 2)
+
+
+class HD2MNEWSComponentScores(BaseModel):
+    respiratory_rate_score: int
+    oxygen_saturation_score: int
+    temperature_score: int
+    systolic_bp_score: int
+    heart_rate_score: int
+    consciousness_score: int
+    vascular_access_score: int
+    idwg_score: int
+    ufr_score: int
+    potassium_score: int
+
+
+class HD2MNEWSCalculationResult(HD2MNEWSComponentScores):
+    idwg_percent: float
+    ufr: float
+    hd2_mnews_total_score: int
+    hd2_mnews_risk_color: Literal["green", "yellow", "red"]
+    hd2_mnews_risk_label_ar: str
+    hd2_mnews_critical_trigger: bool
+    hd2_mnews_critical_reasons: list[str] = Field(default_factory=list)
+
+
 class MonitoringMeasurementCreate(BaseModel):
     patient_id: int = Field(gt=0)
     dialysis_session_id: int = Field(gt=0)
@@ -341,12 +385,19 @@ class MonitoringMeasurementCreate(BaseModel):
     consciousness_level: Literal["alert", "voice", "pain", "unresponsive", "new_confusion"]
     confusion_status: bool | str | None = None
     spo2_scale: Literal["scale_1", "scale_2"] = "scale_1"
+    vascular_access_status: Literal["normal", "weak", "disturbed", "critical"] | None = None
+    pre_dialysis_weight: float | None = Field(default=None, gt=0, le=500)
+    dry_weight: float | None = Field(default=None, gt=0, le=500)
+    session_duration_hours: float | None = Field(default=None, gt=0, le=24)
+    fluid_to_remove: float | None = Field(default=None, ge=0, le=10000)
+    potassium: float | None = Field(default=None, gt=0, le=12)
+    sbp_symptomatic_hypotension: bool = False
     recorded_by_user_id: int | None = Field(default=None, gt=0)
 
-    @field_validator("temperature")
+    @field_validator("temperature", "pre_dialysis_weight", "dry_weight", "session_duration_hours", "fluid_to_remove", "potassium")
     @classmethod
-    def validate_monitoring_temperature_precision(cls, value: float) -> float:
-        return round(value, 1)
+    def validate_monitoring_numeric_precision(cls, value: float | None) -> float | None:
+        return round(value, 2) if value is not None else value
 
 
 class MonitoringMeasurementRead(BaseModel):
@@ -366,6 +417,15 @@ class MonitoringMeasurementRead(BaseModel):
     temperature: float | None = None
     consciousness_level: str | None = None
     confusion_status: str | None = None
+    vascular_access_status: str | None = None
+    pre_dialysis_weight: float | None = None
+    dry_weight: float | None = None
+    session_duration_hours: float | None = None
+    fluid_to_remove: float | None = None
+    potassium: float | None = None
+    idwg_percent: float | None = None
+    ufr: float | None = None
+    sbp_symptomatic_hypotension: bool = False
     recorded_by_user_id: int | None = None
     created_at: datetime
 
@@ -382,6 +442,12 @@ class NEWS2AssessmentRead(NEWS2ComponentScores):
     alert_required: bool
     single_parameter_trigger: bool = False
     trigger_reason: str | None = None
+    hd2_mnews_total_score: int | None = None
+    hd2_mnews_risk_color: str | None = None
+    hd2_mnews_risk_label_ar: str | None = None
+    hd2_mnews_critical_trigger: bool | None = None
+    hd2_mnews_critical_reasons: list[str] = Field(default_factory=list)
+    hd2_mnews_breakdown: dict[str, object] | None = None
     created_by_user_id: int | None = None
     created_at: datetime
 

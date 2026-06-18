@@ -1,8 +1,11 @@
+import json
+
 from sqlalchemy.orm import Session
 
 from app.models import DialysisSession, IntradialyticMeasurement, News2Assessment, Patient
-from app.schemas import MonitoringMeasurementCreate, NEWS2CalculationRequest
+from app.schemas import HD2MNEWSCalculationRequest, HD2MNEWSCalculationResult, MonitoringMeasurementCreate, NEWS2CalculationRequest
 from app.services.alert_service import create_alert_from_news2_assessment
+from app.services.hd2_mnews_service import calculate_hd2_mnews
 from app.services.patient_lifecycle_service import ensure_patient_is_active
 from app.services.news2_service import calculate_news2
 
@@ -72,6 +75,13 @@ def create_measurement_with_news2(db: Session, payload: MonitoringMeasurementCre
             temperature=payload.temperature,
             consciousness_level=payload.consciousness_level,
             confusion_status=confusion_status,
+            vascular_access_status=payload.vascular_access_status,
+            pre_dialysis_weight=payload.pre_dialysis_weight,
+            dry_weight=payload.dry_weight,
+            session_duration_hours=payload.session_duration_hours,
+            fluid_to_remove=payload.fluid_to_remove,
+            potassium=payload.potassium,
+            sbp_symptomatic_hypotension=payload.sbp_symptomatic_hypotension,
             recorded_by_user_id=payload.recorded_by_user_id,
         )
         db.add(measurement)
@@ -89,6 +99,10 @@ def create_measurement_with_news2(db: Session, payload: MonitoringMeasurementCre
                 spo2_scale=payload.spo2_scale,
             )
         )
+        hd2_result = _calculate_hd2_mnews_if_available(payload)
+        if hd2_result:
+            measurement.idwg_percent = hd2_result.idwg_percent
+            measurement.ufr = hd2_result.ufr
 
         assessment = News2Assessment(
             patient_id=payload.patient_id,
@@ -105,6 +119,12 @@ def create_measurement_with_news2(db: Session, payload: MonitoringMeasurementCre
             risk_level=news2_result.risk_level,
             alert_required=news2_result.alert_required,
             trigger_reason=news2_result.trigger_reason,
+            hd2_mnews_total_score=hd2_result.hd2_mnews_total_score if hd2_result else None,
+            hd2_mnews_risk_color=hd2_result.hd2_mnews_risk_color if hd2_result else None,
+            hd2_mnews_risk_label_ar=hd2_result.hd2_mnews_risk_label_ar if hd2_result else None,
+            hd2_mnews_critical_trigger=hd2_result.hd2_mnews_critical_trigger if hd2_result else None,
+            hd2_mnews_critical_reasons=json.dumps(hd2_result.hd2_mnews_critical_reasons, ensure_ascii=False) if hd2_result else None,
+            hd2_mnews_breakdown_json=json.dumps(hd2_result.model_dump(), ensure_ascii=False) if hd2_result else None,
             created_by_user_id=payload.recorded_by_user_id,
         )
         db.add(assessment)
@@ -144,6 +164,56 @@ def _normalize_confusion_status(value: bool | str | None) -> str:
     return normalized
 
 
+def _calculate_hd2_mnews_if_available(payload: MonitoringMeasurementCreate) -> HD2MNEWSCalculationResult | None:
+    required_values = [
+        payload.vascular_access_status,
+        payload.pre_dialysis_weight,
+        payload.dry_weight,
+        payload.session_duration_hours,
+        payload.fluid_to_remove,
+        payload.potassium,
+    ]
+    if any(value is None for value in required_values):
+        return None
+    return calculate_hd2_mnews(
+        HD2MNEWSCalculationRequest(
+            respiratory_rate=payload.respiratory_rate,
+            oxygen_saturation=payload.spo2,
+            temperature=payload.temperature,
+            systolic_bp=payload.systolic_bp,
+            heart_rate=payload.pulse_rate,
+            consciousness_level=payload.consciousness_level,
+            vascular_access_status=payload.vascular_access_status,
+            pre_dialysis_weight=payload.pre_dialysis_weight,
+            dry_weight=payload.dry_weight,
+            session_duration_hours=payload.session_duration_hours,
+            fluid_to_remove=payload.fluid_to_remove,
+            potassium=payload.potassium,
+            sbp_symptomatic_hypotension=payload.sbp_symptomatic_hypotension,
+        )
+    )
+
+
+def _json_list(value: str | None) -> list[str]:
+    if not value:
+        return []
+    try:
+        loaded = json.loads(value)
+    except json.JSONDecodeError:
+        return []
+    return loaded if isinstance(loaded, list) else []
+
+
+def _json_dict(value: str | None) -> dict[str, object] | None:
+    if not value:
+        return None
+    try:
+        loaded = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+    return loaded if isinstance(loaded, dict) else None
+
+
 def _assessment_to_response(assessment: News2Assessment, single_parameter_trigger: bool | None = None) -> dict[str, object]:
     component_scores = [
         assessment.respiratory_score,
@@ -171,6 +241,12 @@ def _assessment_to_response(assessment: News2Assessment, single_parameter_trigge
         "alert_required": assessment.alert_required,
         "single_parameter_trigger": single_parameter_trigger if single_parameter_trigger is not None else any(score == 3 for score in component_scores),
         "trigger_reason": assessment.trigger_reason,
+        "hd2_mnews_total_score": assessment.hd2_mnews_total_score,
+        "hd2_mnews_risk_color": assessment.hd2_mnews_risk_color,
+        "hd2_mnews_risk_label_ar": assessment.hd2_mnews_risk_label_ar,
+        "hd2_mnews_critical_trigger": assessment.hd2_mnews_critical_trigger,
+        "hd2_mnews_critical_reasons": _json_list(assessment.hd2_mnews_critical_reasons),
+        "hd2_mnews_breakdown": _json_dict(assessment.hd2_mnews_breakdown_json),
         "created_by_user_id": assessment.created_by_user_id,
         "created_at": assessment.created_at,
     }

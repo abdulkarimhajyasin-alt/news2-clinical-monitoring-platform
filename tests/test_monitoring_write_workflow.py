@@ -211,6 +211,78 @@ def test_created_news2_score_matches_engine_output(client_with_database):
     assert assessment["alert_required"] == expected.alert_required
 
 
+def test_measurement_with_hd2_fields_persists_hd2_mnews_result(client_with_database):
+    client, TestingSession, ids = client_with_database
+    payload = valid_payload(ids)
+    payload.update(
+        {
+            "respiratory_rate": 18,
+            "spo2": 96,
+            "systolic_bp": 125,
+            "pulse_rate": 88,
+            "temperature": 37.0,
+            "vascular_access_status": "normal",
+            "pre_dialysis_weight": 71.0,
+            "dry_weight": 70.0,
+            "session_duration_hours": 4.0,
+            "fluid_to_remove": 1000.0,
+            "potassium": 4.5,
+            "sbp_symptomatic_hypotension": False,
+        }
+    )
+
+    response = client.post("/api/monitoring/measurements", json=payload)
+
+    assert response.status_code == 201
+    assessment = response.json()["news2_assessment"]
+    assert assessment["hd2_mnews_total_score"] == 0
+    assert assessment["hd2_mnews_risk_color"] == "green"
+    assert assessment["hd2_mnews_risk_label_ar"] == "أخضر / آمن"
+    assert assessment["hd2_mnews_breakdown"]["idwg_percent"] == 1.43
+    assert assessment["hd2_mnews_breakdown"]["ufr"] == 3.57
+
+    db = TestingSession()
+    try:
+        measurement = db.query(IntradialyticMeasurement).first()
+        stored_assessment = db.query(News2Assessment).first()
+        assert measurement.vascular_access_status == "normal"
+        assert measurement.idwg_percent == 1.43
+        assert measurement.ufr == 3.57
+        assert stored_assessment.hd2_mnews_total_score == 0
+        assert stored_assessment.hd2_mnews_risk_color == "green"
+    finally:
+        db.close()
+
+
+def test_hd2_automatic_red_creates_high_priority_alert(client_with_database):
+    client, _, ids = client_with_database
+    payload = valid_payload(ids)
+    payload.update(
+        {
+            "respiratory_rate": 18,
+            "spo2": 91,
+            "systolic_bp": 125,
+            "pulse_rate": 88,
+            "temperature": 37.0,
+            "vascular_access_status": "normal",
+            "pre_dialysis_weight": 71.0,
+            "dry_weight": 70.0,
+            "session_duration_hours": 4.0,
+            "fluid_to_remove": 1000.0,
+            "potassium": 4.5,
+        }
+    )
+
+    response = client.post("/api/monitoring/measurements", json=payload)
+
+    assert response.status_code == 201
+    alert = response.json()["alert"]
+    assert alert["alert_created"] is True
+    assert alert["risk_level"] == "high"
+    assert alert["priority"] == "immediate"
+    assert alert["trigger_reason"] == "HD2-mNEWS automatic red"
+
+
 def test_alert_is_created_when_monitoring_score_requires_it(client_with_database):
     client, TestingSession, ids = client_with_database
 

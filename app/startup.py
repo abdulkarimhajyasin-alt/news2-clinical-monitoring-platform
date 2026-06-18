@@ -24,6 +24,7 @@ def initialize_database(db_engine: Engine = engine) -> None:
     Base.metadata.create_all(bind=db_engine)
     ensure_user_management_columns(db_engine)
     ensure_patient_lifecycle_columns(db_engine)
+    ensure_hd2_mnews_columns(db_engine)
     logger.info("Database tables ready.")
 
 
@@ -65,6 +66,40 @@ def ensure_patient_lifecycle_columns(db_engine: Engine = engine) -> None:
             if column_name not in existing_columns:
                 connection.execute(text(f"ALTER TABLE patients ADD COLUMN {column_name} {sql_type}"))
         connection.execute(text("UPDATE patients SET status = 'active' WHERE status IS NULL OR status = ''"))
+
+
+def ensure_hd2_mnews_columns(db_engine: Engine = engine) -> None:
+    inspector = inspect(db_engine)
+    table_names = set(inspector.get_table_names())
+    column_sql_by_table = {
+        "intradialytic_measurements": {
+            "vascular_access_status": "VARCHAR(40)",
+            "pre_dialysis_weight": "FLOAT",
+            "dry_weight": "FLOAT",
+            "session_duration_hours": "FLOAT",
+            "fluid_to_remove": "FLOAT",
+            "potassium": "FLOAT",
+            "idwg_percent": "FLOAT",
+            "ufr": "FLOAT",
+            "sbp_symptomatic_hypotension": "BOOLEAN DEFAULT FALSE NOT NULL",
+        },
+        "news2_assessments": {
+            "hd2_mnews_total_score": "INTEGER",
+            "hd2_mnews_risk_color": "VARCHAR(40)",
+            "hd2_mnews_risk_label_ar": "VARCHAR(80)",
+            "hd2_mnews_critical_trigger": "BOOLEAN",
+            "hd2_mnews_critical_reasons": "TEXT",
+            "hd2_mnews_breakdown_json": "TEXT",
+        },
+    }
+    with db_engine.begin() as connection:
+        for table_name, column_sql in column_sql_by_table.items():
+            if table_name not in table_names:
+                continue
+            existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
+            for column_name, sql_type in column_sql.items():
+                if column_name not in existing_columns:
+                    connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {sql_type}"))
 
 
 def seed_database_if_empty(

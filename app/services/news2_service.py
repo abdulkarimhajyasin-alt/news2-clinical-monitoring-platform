@@ -1,3 +1,5 @@
+import json
+
 from sqlalchemy.orm import Session
 
 from app.models import News2Assessment
@@ -191,6 +193,32 @@ def _assessment_to_response(assessment: News2Assessment) -> dict[str, object]:
         "alert_required": assessment.alert_required,
         "single_parameter_trigger": any(score == 3 for score in component_scores),
         "trigger_reason": assessment.trigger_reason,
+        "hd2_mnews_total_score": assessment.hd2_mnews_total_score,
+        "hd2_mnews_risk_color": assessment.hd2_mnews_risk_color,
+        "hd2_mnews_risk_label_ar": assessment.hd2_mnews_risk_label_ar,
+        "hd2_mnews_critical_trigger": assessment.hd2_mnews_critical_trigger,
+        "hd2_mnews_critical_reasons": _json_list(assessment.hd2_mnews_critical_reasons),
+        "hd2_mnews_breakdown": _json_dict(assessment.hd2_mnews_breakdown_json),
         "created_by_user_id": assessment.created_by_user_id,
         "created_at": assessment.created_at,
     }
+
+
+def _json_list(value: str | None) -> list[str]:
+    if not value:
+        return []
+    try:
+        loaded = json.loads(value)
+    except json.JSONDecodeError:
+        return []
+    return loaded if isinstance(loaded, list) else []
+
+
+def _json_dict(value: str | None) -> dict[str, object] | None:
+    if not value:
+        return None
+    try:
+        loaded = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+    return loaded if isinstance(loaded, dict) else None
