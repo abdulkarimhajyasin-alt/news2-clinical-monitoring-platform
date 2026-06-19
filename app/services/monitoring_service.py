@@ -103,6 +103,7 @@ def create_measurement_with_news2(db: Session, payload: MonitoringMeasurementCre
         if hd2_result:
             measurement.idwg_percent = hd2_result.idwg_percent
             measurement.ufr = hd2_result.ufr
+        hd2_protocol = hd2_result.nursing_protocol if hd2_result else None
 
         assessment = News2Assessment(
             patient_id=payload.patient_id,
@@ -125,6 +126,13 @@ def create_measurement_with_news2(db: Session, payload: MonitoringMeasurementCre
             hd2_mnews_critical_trigger=hd2_result.hd2_mnews_critical_trigger if hd2_result else None,
             hd2_mnews_critical_reasons=json.dumps(hd2_result.hd2_mnews_critical_reasons, ensure_ascii=False) if hd2_result else None,
             hd2_mnews_breakdown_json=json.dumps(hd2_result.model_dump(), ensure_ascii=False) if hd2_result else None,
+            hd2_protocol_json=json.dumps(hd2_protocol, ensure_ascii=False) if hd2_protocol else None,
+            hd2_reassessment_interval_min=hd2_protocol.get("reassessment_interval_minutes_min") if hd2_protocol else None,
+            hd2_reassessment_interval_max=hd2_protocol.get("reassessment_interval_minutes_max") if hd2_protocol else None,
+            hd2_required_response_time_minutes=hd2_protocol.get("required_response_time_minutes") if hd2_protocol else None,
+            hd2_requires_physician_call=hd2_protocol.get("requires_physician_call") if hd2_protocol else None,
+            hd2_requires_emergency_preparation=hd2_protocol.get("requires_emergency_preparation") if hd2_protocol else None,
+            hd2_requires_close_monitoring=hd2_protocol.get("requires_close_monitoring") if hd2_protocol else None,
             created_by_user_id=payload.recorded_by_user_id,
         )
         db.add(assessment)
@@ -247,6 +255,14 @@ def _assessment_to_response(assessment: News2Assessment, single_parameter_trigge
         "hd2_mnews_critical_trigger": assessment.hd2_mnews_critical_trigger,
         "hd2_mnews_critical_reasons": _json_list(assessment.hd2_mnews_critical_reasons),
         "hd2_mnews_breakdown": _json_dict(assessment.hd2_mnews_breakdown_json),
+        "hd2_protocol": _json_dict(assessment.hd2_protocol_json),
+        "hd2_reassessment_interval_min": assessment.hd2_reassessment_interval_min,
+        "hd2_reassessment_interval_max": assessment.hd2_reassessment_interval_max,
+        "hd2_required_response_time_minutes": assessment.hd2_required_response_time_minutes,
+        "hd2_requires_physician_call": assessment.hd2_requires_physician_call,
+        "hd2_requires_emergency_preparation": assessment.hd2_requires_emergency_preparation,
+        "hd2_requires_close_monitoring": assessment.hd2_requires_close_monitoring,
+        "hd2_protocol_summary_ar": (_json_dict(assessment.hd2_protocol_json) or {}).get("protocol_summary_ar"),
         "created_by_user_id": assessment.created_by_user_id,
         "created_at": assessment.created_at,
     }

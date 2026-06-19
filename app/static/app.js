@@ -228,6 +228,9 @@ const appState = {
   clinicalOutcomes: [],
   outcomeSummary: null,
   outcomeSubmission: null,
+  outcomeValidations: [],
+  outcomeValidationLookup: null,
+  outcomeValidationSubmission: null,
   patientSubmission: null,
   sessionSubmission: null,
   researchDatasetRows: [],
@@ -436,6 +439,19 @@ const api = {
   },
   createClinicalOutcome(payload) {
     return this.request("/api/outcomes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+  },
+  getOutcomeValidations(filters = {}) {
+    return this.request(`/api/outcome-validations${queryString(filters)}`).then((rows) => rows.map(normalizeOutcomeValidation72h));
+  },
+  getOutcomeValidationForSession(sessionId) {
+    return this.request(`/api/outcome-validations/session/${sessionId}`).then(normalizeOutcomeValidation72h);
+  },
+  createOutcomeValidation(payload) {
+    return this.request("/api/outcome-validations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
@@ -872,6 +888,36 @@ function normalizeClinicalOutcome(row) {
     description: row.description,
     recordedByUserId: row.recorded_by_user_id,
     createdAt: row.created_at
+  };
+}
+
+function normalizeOutcomeValidation72h(row) {
+  return {
+    id: row.id ?? null,
+    patientId: row.patient_id ?? null,
+    patientCode: row.patient_code || (row.patient_id ? `ID ${row.patient_id}` : "-"),
+    dialysisSessionId: row.dialysis_session_id,
+    sessionDate: row.session_date || null,
+    eligibleForCompletion: Boolean(row.eligible_for_completion),
+    eligibilityTime: row.eligibility_time || null,
+    remainingMinutes: row.remaining_minutes ?? null,
+    deteriorationOccurred: row.deterioration_occurred,
+    deteriorationTypes: row.deterioration_types || [],
+    typeSpecificDetails: row.type_specific_details || {},
+    deteriorationTimingCategory: row.deterioration_timing_category || null,
+    deteriorationTime: row.deterioration_time || null,
+    deteriorationDatetime: row.deterioration_datetime || null,
+    platformPredictionStatus: row.platform_prediction_status || null,
+    interventions: row.interventions || [],
+    doctorResponseTimeMinutes: row.doctor_response_time_minutes ?? null,
+    finalResult: row.final_result || null,
+    verificationSources: row.verification_sources || [],
+    notes: row.notes || "",
+    completedByUserId: row.completed_by_user_id ?? null,
+    completedAt: row.completed_at || null,
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null,
+    message: row.message || ""
   };
 }
 
@@ -1496,8 +1542,11 @@ function ensureDataForRoute(route) {
   }
   if (["clinical-outcomes", "outcome-tracking", "outcome-analytics"].includes(route.id)) {
     if (!appState.clinicalOutcomes.length && !appState.loading.clinicalOutcomes) loadResource("clinicalOutcomes", api.getClinicalOutcomes.bind(api));
+    if (!appState.outcomeValidations.length && !appState.loading.outcomeValidations) loadResource("outcomeValidations", api.getOutcomeValidations.bind(api));
     if (!appState.outcomeSummary && !appState.loading.outcomeSummary) loadResource("outcomeSummary", api.getOutcomeSummary.bind(api));
     if (!appState.deteriorationEvents.length && !appState.loading.deteriorationEvents) loadResource("deteriorationEvents", api.getDeteriorationEvents.bind(api));
+    if (!appState.dialysisSessions.length && !appState.loading.dialysisSessions) loadResource("dialysisSessions", api.getDialysisSessions.bind(api));
+    if (appState.patientDataScope !== "patients:active" && !appState.loading.patients) loadPatients({ status: "active" }, "patients:active");
   }
   if (["export-center", "dataset-statistics"].includes(route.id)) {
     if (!appState.researchDatasetRows.length && !appState.loading.researchDatasetRows) loadResource("researchDatasetRows", () => api.getResearchDataset(appState.researchExportFilters));
@@ -2013,6 +2062,10 @@ function renderClinicalOutcomes() {
     ${card("تسجيل المآل السريري", renderOutcomeForm())}
     ${card("نتيجة التسجيل", renderOutcomeSubmission())}
   </div>
+  <div class="grid cols-2" style="margin-top:16px">
+    ${card("النتيجة السريرية بعد 72 ساعة", renderOutcomeValidation72hForm())}
+    ${card("سجلات التحقق بعد 72 ساعة", renderOutcomeValidation72hList())}
+  </div>
   <div style="margin-top:16px">${card("متابعة المآلات", rows.length ? renderTable(["المعرف", "المريض", "تاريخ الجلسة", "التنبيه", "NEWS2", "نوع التدهور", "نوع المآل", "الفترة", "المسجل", "وقت التسجيل"], rows) : emptyBlock("لا توجد مآلات سريرية مسجلة حتى الآن"))}</div>`;
 }
 
@@ -2054,6 +2107,88 @@ function renderOutcomeSubmission() {
   if (!result) return `<p class="kpi-meta">اختر حدث التدهور، نوع المآل، والفترة الزمنية ثم احفظ السجل.</p>`;
   const outcome = normalizeClinicalOutcome(result.outcome);
   return `<div class="state-message empty"><strong>${result.outcome_created ? "تم تسجيل المآل بنجاح" : "يوجد مآل مسجل مسبقا لهذه الفترة"}</strong><span>مآل #${outcome.id} - ${escapeHtml(label(labels.outcomeType, outcome.outcomeType))} - ${outcome.outcomeWindowHours} ساعة</span></div>`;
+}
+
+function renderOutcomeValidation72hForm() {
+  const sessions = appState.dialysisSessions || [];
+  if (appState.loading.dialysisSessions || appState.loading.patients) return loadingBlock("جاري تحميل الجلسات...");
+  if (!sessions.length) return emptyBlock("لا توجد جلسات متاحة للتحقق بعد 72 ساعة");
+  const selected = appState.outcomeValidationLookup;
+  const sessionOptions = sessions.map((session) => `<option value="${session.id}">#${session.id} - ${escapeHtml(session.patientCode || `P${session.patientId}`)} - ${escapeHtml(session.sessionDate || "-")}</option>`).join("");
+  const eligibility = selected
+    ? `<div class="state-message ${selected.eligibleForCompletion ? "empty" : "warning"}"><strong>${selected.eligibleForCompletion ? "النموذج متاح للتوثيق" : "لم تمر 72 ساعة"}</strong><span>${escapeHtml(selected.message || "")}${selected.remainingMinutes ? ` - المتبقي ${Math.ceil(selected.remainingMinutes / 60)} ساعة` : ""}</span></div>`
+    : `<p class="kpi-meta">اختر جلسة للتحقق من أهلية التوثيق بعد 72 ساعة.</p>`;
+  return `<form class="form-grid" onsubmit="submitOutcomeValidationLookup(event)">
+    <div class="field full"><label>جلسة الغسيل</label><select name="dialysis_session_id" required>${sessionOptions}</select></div>
+    <div class="footer-actions full"><button class="btn" type="submit">فحص الأهلية</button></div>
+  </form>
+  ${eligibility}
+  ${selected?.id ? renderExistingOutcomeValidation(selected) : renderOutcomeValidation72hCreateForm(selected)}`;
+}
+
+function renderOutcomeValidation72hCreateForm(eligibility) {
+  if (!eligibility?.eligibleForCompletion) return "";
+  const session = appState.dialysisSessions.find((item) => item.id === eligibility.dialysisSessionId);
+  if (!session) return "";
+  return `<form class="form-grid" onsubmit="submitOutcomeValidation72h(event)">
+    <input name="patient_id" type="hidden" value="${session.patientId}">
+    <input name="dialysis_session_id" type="hidden" value="${session.id}">
+    <div class="field"><label>هل حدث تدهور؟</label><select name="deterioration_occurred" required onchange="toggleOutcomeValidationDetails(this.value)"><option value="no">لا</option><option value="yes">نعم</option></select></div>
+    <div class="field full outcome-validation-yes" hidden><label>نوع التدهور</label>${checkboxGroup("deterioration_types", outcomeValidationTypeLabels())}</div>
+    <div class="field outcome-validation-yes" hidden><label>متى حدث التدهور؟</label><select name="deterioration_timing_category"><option value="during_session">أثناء الجلسة</option><option value="within_6h_after_session">بعد الجلسة خلال 6 ساعات</option><option value="within_24_72h">خلال 24-72 ساعة</option></select></div>
+    <div class="field outcome-validation-yes" hidden><label>وقت التدهور</label><input name="deterioration_time" type="time"></div>
+    <div class="field outcome-validation-yes" hidden><label>تاريخ ووقت التدهور</label><input name="deterioration_datetime" type="datetime-local"></div>
+    <div class="field outcome-validation-yes" hidden><label>هل تنبأت المنصة؟</label><select name="platform_prediction_status"><option value="predicted_before">نعم - قبل الحدوث</option><option value="predicted_concurrent">نعم - متزامنا</option><option value="not_predicted">لا - بدون تنبيه</option><option value="false_negative">False Negative</option></select></div>
+    <div class="field full outcome-validation-yes" hidden><label>الإجراء المتخذ</label>${checkboxGroup("interventions", outcomeValidationInterventionLabels())}</div>
+    <div class="field outcome-validation-yes" hidden><label>زمن استجابة الطبيب بالدقائق</label><input name="doctor_response_time_minutes" type="number" min="0"></div>
+    <div class="field outcome-validation-yes" hidden><label>النتيجة النهائية</label><select name="final_result"><option value="full_improvement">تحسن كامل</option><option value="partial_improvement">تحسن جزئي</option><option value="no_improvement">لم يتحسن</option><option value="further_deterioration">تدهور إضافي</option></select></div>
+    <div class="field"><label>الضغط الأدنى</label><input name="lowest_sbp" type="number" min="1"></div>
+    <div class="field"><label>قيمة البوتاسيوم</label><input name="potassium_value" type="number" min="0" step="0.1"></div>
+    <div class="field"><label>نوع اضطراب النظم</label><input name="arrhythmia_type" placeholder="tachycardia / bradycardia / other"></div>
+    <div class="field"><label>مضاعفات الوصول الوعائي</label><input name="vascular_complication_type"></div>
+    <div class="field"><label>نوع التدهور العصبي</label><input name="neurological_type"></div>
+    <div class="field"><label>تاريخ الدخول الطارئ</label><input name="emergency_admission_datetime" type="datetime-local"></div>
+    <div class="field"><label>تاريخ التحويل للعناية</label><input name="icu_transfer_datetime" type="datetime-local"></div>
+    <div class="field"><label>تاريخ الوفاة</label><input name="death_datetime" type="datetime-local"></div>
+    <div class="field full"><label>التحقق من صحة البيانات</label>${checkboxGroup("verification_sources", outcomeValidationVerificationLabels())}</div>
+    <div class="field full"><label>ملاحظات</label><textarea name="notes"></textarea></div>
+    <input name="completed_by_user_id" type="hidden" value="2">
+    <div class="footer-actions full"><button class="btn primary" type="submit">حفظ تحقق 72 ساعة</button></div>
+  </form>`;
+}
+
+function renderExistingOutcomeValidation(validation) {
+  return `<div class="state-message empty"><strong>تم توثيق التحقق بعد 72 ساعة</strong><span>${validation.deteriorationOccurred ? "حدث تدهور" : "لم يحدث تدهور"} - ${escapeHtml(validation.platformPredictionStatus || "-")} - ${escapeHtml(validation.finalResult || "-")}</span></div>`;
+}
+
+function renderOutcomeValidation72hList() {
+  const rows = (appState.outcomeValidations || []).map((item) => [
+    item.id,
+    item.patientCode,
+    item.sessionDate || "-",
+    item.deteriorationOccurred ? badge("نعم", "danger", true) : badge("لا", "success"),
+    item.platformPredictionStatus || "-",
+    item.finalResult || "-",
+    item.verificationSources.length ? badge("موثق", "success") : badge("ناقص", "warning"),
+    formatDateTime(item.completedAt)
+  ]);
+  return rows.length ? renderTable(["المعرف", "المريض", "الجلسة", "تدهور", "تنبؤ المنصة", "النتيجة", "التحقق", "وقت التوثيق"], rows) : emptyBlock("لا توجد سجلات تحقق بعد 72 ساعة");
+}
+
+function checkboxGroup(name, entries) {
+  return `<div class="checkbox-grid">${Object.entries(entries).map(([value, text]) => `<label><input type="checkbox" name="${name}" value="${value}"> ${escapeHtml(text)}</label>`).join("")}</div>`;
+}
+
+function outcomeValidationTypeLabels() {
+  return { severe_hypotension: "هبوط ضغط شديد", cardiac_arrhythmia: "اضطراب نظم قلبي", electrolyte_disorder: "اضطراب كهرلي", vascular_access_complication: "مضاعفات فيستولا / وصول وعائي", neurological_deterioration: "تدهور عصبي", emergency_admission: "دخول طارئ", icu_transfer: "تحويل للعناية", death: "وفاة" };
+}
+
+function outcomeValidationInterventionLabels() {
+  return { doctor_called: "استدعاء الطبيب", fluids_given: "إعطاء محاليل", machine_settings_adjusted: "تعديل إعدادات الجهاز", dialysis_stopped: "إيقاف الغسيل", emergency_medications_given: "إعطاء أدوية طارئة", ed_transfer: "تحويل للطوارئ" };
+}
+
+function outcomeValidationVerificationLabels() {
+  return { medical_record_reviewed: "تمت مراجعة السجل الطبي", nurse_interviewed: "تمت مقابلة الممرض", phone_followup_done: "تمت المتابعة الهاتفية", independent_doctor_verified: "تم التحقق من طبيب مستقل" };
 }
 
 function renderTable(headers, rows) {
@@ -2813,6 +2948,85 @@ async function submitClinicalOutcome(event) {
     appState.loading.outcomeSubmission = false;
     render();
   }
+}
+
+async function submitOutcomeValidationLookup(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  const sessionId = Number(data.get("dialysis_session_id"));
+  appState.loading.outcomeValidationLookup = true;
+  appState.errors.outcomeValidationLookup = null;
+  render();
+  try {
+    appState.outcomeValidationLookup = await api.getOutcomeValidationForSession(sessionId);
+  } catch (error) {
+    appState.errors.outcomeValidationLookup = error.message || "تعذر فحص أهلية التحقق";
+  } finally {
+    appState.loading.outcomeValidationLookup = false;
+    render();
+  }
+}
+
+async function submitOutcomeValidation72h(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  const occurred = data.get("deterioration_occurred") === "yes";
+  const payload = {
+    patient_id: Number(data.get("patient_id")),
+    dialysis_session_id: Number(data.get("dialysis_session_id")),
+    deterioration_occurred: occurred,
+    deterioration_types: occurred ? data.getAll("deterioration_types") : [],
+    type_specific_details: {
+      lowest_sbp: numberOrNull(data.get("lowest_sbp")),
+      required_treatment: data.get("lowest_sbp") ? true : null,
+      arrhythmia_type: data.get("arrhythmia_type") || null,
+      potassium_value: numberOrNull(data.get("potassium_value")),
+      vascular_complication_type: data.get("vascular_complication_type") || null,
+      neurological_type: data.get("neurological_type") || null,
+      emergency_admission_datetime: datetimeLocalToIso(data.get("emergency_admission_datetime")),
+      icu_transfer_datetime: datetimeLocalToIso(data.get("icu_transfer_datetime")),
+      death_datetime: datetimeLocalToIso(data.get("death_datetime"))
+    },
+    deterioration_timing_category: occurred ? data.get("deterioration_timing_category") : null,
+    deterioration_time: occurred && data.get("deterioration_time") ? data.get("deterioration_time") : null,
+    deterioration_datetime: occurred ? datetimeLocalToIso(data.get("deterioration_datetime")) : null,
+    platform_prediction_status: occurred ? data.get("platform_prediction_status") : null,
+    interventions: occurred ? data.getAll("interventions") : [],
+    doctor_response_time_minutes: numberOrNull(data.get("doctor_response_time_minutes")),
+    final_result: occurred ? data.get("final_result") : null,
+    verification_sources: data.getAll("verification_sources"),
+    notes: data.get("notes") || null,
+    completed_by_user_id: Number(data.get("completed_by_user_id"))
+  };
+  appState.loading.outcomeValidationSubmission = true;
+  appState.errors.outcomeValidationSubmission = null;
+  render();
+  try {
+    appState.outcomeValidationSubmission = await api.createOutcomeValidation(payload);
+    appState.outcomeValidations = await api.getOutcomeValidations();
+    appState.outcomeValidationLookup = normalizeOutcomeValidation72h(appState.outcomeValidationSubmission.validation);
+  } catch (error) {
+    appState.errors.outcomeValidationSubmission = error.message || "تعذر حفظ تحقق 72 ساعة";
+  } finally {
+    appState.loading.outcomeValidationSubmission = false;
+    render();
+  }
+}
+
+function toggleOutcomeValidationDetails(value) {
+  document.querySelectorAll(".outcome-validation-yes").forEach((node) => {
+    node.hidden = value !== "yes";
+  });
+}
+
+function numberOrNull(value) {
+  if (value === null || value === undefined || value === "") return null;
+  return Number(value);
+}
+
+function datetimeLocalToIso(value) {
+  if (!value) return null;
+  return new Date(value).toISOString();
 }
 
 function renderAssessment() {

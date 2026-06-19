@@ -240,6 +240,10 @@ def test_measurement_with_hd2_fields_persists_hd2_mnews_result(client_with_datab
     assert assessment["hd2_mnews_risk_label_ar"] == "أخضر / آمن"
     assert assessment["hd2_mnews_breakdown"]["idwg_percent"] == 1.43
     assert assessment["hd2_mnews_breakdown"]["ufr"] == 3.57
+    assert assessment["hd2_protocol"]["risk_color"] == "green"
+    assert assessment["hd2_reassessment_interval_min"] == 60
+    assert assessment["hd2_reassessment_interval_max"] == 60
+    assert assessment["hd2_requires_physician_call"] is False
 
     db = TestingSession()
     try:
@@ -250,6 +254,9 @@ def test_measurement_with_hd2_fields_persists_hd2_mnews_result(client_with_datab
         assert measurement.ufr == 3.57
         assert stored_assessment.hd2_mnews_total_score == 0
         assert stored_assessment.hd2_mnews_risk_color == "green"
+        assert stored_assessment.hd2_protocol_json is not None
+        assert stored_assessment.hd2_reassessment_interval_min == 60
+        assert stored_assessment.hd2_requires_close_monitoring is False
     finally:
         db.close()
 
@@ -280,7 +287,7 @@ def test_hd2_automatic_red_creates_high_priority_alert(client_with_database):
     assert alert["alert_created"] is True
     assert alert["risk_level"] == "high"
     assert alert["priority"] == "immediate"
-    assert alert["trigger_reason"] == "HD2-mNEWS automatic red"
+    assert alert["trigger_reason"].startswith("HD2-mNEWS automatic red")
 
 
 def test_alert_is_created_when_monitoring_score_requires_it(client_with_database):

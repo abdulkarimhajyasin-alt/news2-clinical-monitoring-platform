@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -484,6 +484,10 @@ class HD2MNEWSCalculationResult(HD2MNEWSComponentScores):
     hd2_mnews_risk_label_ar: str
     hd2_mnews_critical_trigger: bool
     hd2_mnews_critical_reasons: list[str] = Field(default_factory=list)
+    nursing_protocol: dict[str, object] | None = None
+    reassessment_interval_label_ar: str | None = None
+    required_response_time_label_ar: str | None = None
+    protocol_actions_ar: list[str] = Field(default_factory=list)
 
 
 class MonitoringMeasurementCreate(BaseModel):
@@ -542,6 +546,12 @@ class MonitoringMeasurementRead(BaseModel):
     idwg_percent: float | None = None
     ufr: float | None = None
     sbp_symptomatic_hypotension: bool = False
+    hd2_mnews_total_score: int | None = None
+    hd2_mnews_risk_color: str | None = None
+    hd2_mnews_risk_label_ar: str | None = None
+    hd2_reassessment_interval_min: int | None = None
+    hd2_reassessment_interval_max: int | None = None
+    hd2_required_response_time_minutes: int | None = None
     recorded_by_user_id: int | None = None
     created_at: datetime
 
@@ -564,6 +574,14 @@ class NEWS2AssessmentRead(NEWS2ComponentScores):
     hd2_mnews_critical_trigger: bool | None = None
     hd2_mnews_critical_reasons: list[str] = Field(default_factory=list)
     hd2_mnews_breakdown: dict[str, object] | None = None
+    hd2_protocol: dict[str, object] | None = None
+    hd2_reassessment_interval_min: int | None = None
+    hd2_reassessment_interval_max: int | None = None
+    hd2_required_response_time_minutes: int | None = None
+    hd2_requires_physician_call: bool | None = None
+    hd2_requires_emergency_preparation: bool | None = None
+    hd2_requires_close_monitoring: bool | None = None
+    hd2_protocol_summary_ar: str | None = None
     created_by_user_id: int | None = None
     created_at: datetime
 
@@ -777,6 +795,129 @@ class ClinicalOutcomeRead(BaseModel):
 class ClinicalOutcomeResult(BaseModel):
     outcome: ClinicalOutcomeRead
     outcome_created: bool
+    message: str
+
+
+OutcomeValidationDeteriorationType = Literal[
+    "severe_hypotension",
+    "cardiac_arrhythmia",
+    "electrolyte_disorder",
+    "vascular_access_complication",
+    "neurological_deterioration",
+    "emergency_admission",
+    "icu_transfer",
+    "death",
+]
+OutcomeValidationTiming = Literal["during_session", "within_6h_after_session", "within_24_72h"]
+OutcomeValidationPredictionStatus = Literal["predicted_before", "predicted_concurrent", "not_predicted", "false_negative"]
+OutcomeValidationIntervention = Literal[
+    "doctor_called",
+    "fluids_given",
+    "machine_settings_adjusted",
+    "dialysis_stopped",
+    "emergency_medications_given",
+    "ed_transfer",
+]
+OutcomeValidationFinalResult = Literal["full_improvement", "partial_improvement", "no_improvement", "further_deterioration"]
+OutcomeValidationVerificationSource = Literal[
+    "medical_record_reviewed",
+    "nurse_interviewed",
+    "phone_followup_done",
+    "independent_doctor_verified",
+]
+
+
+class OutcomeValidationTypeDetails(BaseModel):
+    lowest_sbp: int | None = Field(default=None, gt=0, le=300)
+    required_treatment: bool | None = None
+    arrhythmia_type: Literal["tachycardia", "bradycardia", "irregular_rhythm", "unknown", "other"] | None = None
+    arrhythmia_other_notes: str | None = Field(default=None, max_length=1000)
+    potassium_value: float | None = Field(default=None, gt=0, le=12)
+    vascular_complication_type: str | None = Field(default=None, max_length=120)
+    neurological_type: str | None = Field(default=None, max_length=120)
+    emergency_admission_datetime: datetime | None = None
+    emergency_admission_reason: str | None = Field(default=None, max_length=4000)
+    icu_transfer_datetime: datetime | None = None
+    death_datetime: datetime | None = None
+    death_reason: str | None = Field(default=None, max_length=4000)
+
+
+class OutcomeValidation72hBase(BaseModel):
+    patient_id: int = Field(gt=0)
+    dialysis_session_id: int = Field(gt=0)
+    deterioration_occurred: bool
+    deterioration_types: list[OutcomeValidationDeteriorationType] = Field(default_factory=list)
+    type_specific_details: OutcomeValidationTypeDetails = Field(default_factory=OutcomeValidationTypeDetails)
+    deterioration_timing_category: OutcomeValidationTiming | None = None
+    deterioration_time: time | None = None
+    deterioration_datetime: datetime | None = None
+    platform_prediction_status: OutcomeValidationPredictionStatus | None = None
+    interventions: list[OutcomeValidationIntervention] = Field(default_factory=list)
+    doctor_response_time_minutes: int | None = Field(default=None, ge=0, le=1440)
+    final_result: OutcomeValidationFinalResult | None = None
+    verification_sources: list[OutcomeValidationVerificationSource] = Field(default_factory=list)
+    notes: str | None = Field(default=None, max_length=4000)
+    completed_by_user_id: int | None = Field(default=None, gt=0)
+
+    @field_validator("notes")
+    @classmethod
+    def strip_validation_notes(cls, value: str | None) -> str | None:
+        return value.strip() if isinstance(value, str) else value
+
+    def model_post_init(self, __context) -> None:
+        if not self.verification_sources:
+            raise ValueError("verification_sources is required")
+        if not self.deterioration_occurred:
+            if not self.notes:
+                raise ValueError("notes are required when deterioration did not occur")
+            self.deterioration_types = []
+            self.interventions = []
+            return
+        if not self.deterioration_types:
+            raise ValueError("deterioration_types is required when deterioration occurred")
+        if self.deterioration_timing_category is None:
+            raise ValueError("deterioration_timing_category is required when deterioration occurred")
+        if self.platform_prediction_status is None:
+            raise ValueError("platform_prediction_status is required when deterioration occurred")
+        if not self.interventions:
+            raise ValueError("interventions is required when deterioration occurred")
+        if self.final_result is None:
+            raise ValueError("final_result is required when deterioration occurred")
+        if "doctor_called" in self.interventions and self.doctor_response_time_minutes is None:
+            raise ValueError("doctor_response_time_minutes is required when doctor_called is selected")
+
+
+class OutcomeValidation72hCreate(OutcomeValidation72hBase):
+    pass
+
+
+class OutcomeValidation72hUpdate(OutcomeValidation72hBase):
+    pass
+
+
+class OutcomeValidation72hRead(OutcomeValidation72hBase):
+    id: int
+    patient_code: str | None = None
+    session_date: date | None = None
+    eligible_for_completion: bool = False
+    eligibility_time: datetime | None = None
+    remaining_minutes: int | None = None
+    completed_at: datetime
+    created_at: datetime
+    updated_at: datetime
+
+
+class OutcomeValidation72hEligibility(BaseModel):
+    dialysis_session_id: int
+    eligible_for_completion: bool
+    eligibility_time: datetime | None = None
+    remaining_minutes: int | None = None
+    message: str
+
+
+class OutcomeValidation72hResult(BaseModel):
+    validation: OutcomeValidation72hRead
+    validation_created: bool
     message: str
 
 

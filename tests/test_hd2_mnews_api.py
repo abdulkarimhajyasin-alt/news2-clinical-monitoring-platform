@@ -37,6 +37,9 @@ def test_hd2_mnews_calculate_returns_full_breakdown():
     assert payload["idwg_percent"] == 1.43
     assert payload["ufr"] == 3.57
     assert payload["vascular_access_score"] == 0
+    assert payload["nursing_protocol"]["risk_color"] == "green"
+    assert payload["nursing_protocol"]["reassessment_interval_minutes_min"] == 60
+    assert payload["protocol_actions_ar"]
 
 
 def test_hd2_mnews_endpoint_automatic_red_for_spo2():
@@ -46,7 +49,22 @@ def test_hd2_mnews_endpoint_automatic_red_for_spo2():
     payload = response.json()
     assert payload["hd2_mnews_risk_color"] == "red"
     assert payload["hd2_mnews_critical_trigger"] is True
+    assert payload["nursing_protocol"]["requires_physician_call"] is True
+    assert payload["required_response_time_label_ar"] is not None
     assert "SpO2 ≤91%" in payload["hd2_mnews_critical_reasons"]
+
+
+def test_hd2_mnews_endpoint_yellow_protocol_is_stable():
+    response = client.post(
+        "/api/hd2-mnews/calculate",
+        json=hd2_payload(respiratory_rate=22, oxygen_saturation=94, systolic_bp=105, heart_rate=100, potassium=5.3),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["hd2_mnews_risk_color"] == "yellow"
+    assert payload["nursing_protocol"]["reassessment_interval_minutes_min"] == 15
+    assert payload["nursing_protocol"]["reassessment_interval_minutes_max"] == 30
 
 
 def test_existing_standard_news2_endpoint_still_works():

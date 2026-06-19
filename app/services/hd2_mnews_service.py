@@ -1,4 +1,5 @@
 from app.schemas import HD2MNEWSCalculationRequest, HD2MNEWSCalculationResult, HD2MNEWSComponentScores
+from app.services.hd2_protocol_service import build_hd2_nursing_protocol, reassessment_interval_label_ar, required_response_time_label_ar
 
 
 RISK_LABELS_AR = {
@@ -134,6 +135,8 @@ def calculate_hd2_mnews(request: HD2MNEWSCalculationRequest) -> HD2MNEWSCalculat
         risk_color = "green"
         risk_label_ar = RISK_LABELS_AR["green"]
 
+    nursing_protocol = build_hd2_nursing_protocol(total_score, risk_color, critical_reasons)
+
     return HD2MNEWSCalculationResult(
         **component_scores.model_dump(),
         idwg_percent=idwg_percent,
@@ -143,6 +146,10 @@ def calculate_hd2_mnews(request: HD2MNEWSCalculationRequest) -> HD2MNEWSCalculat
         hd2_mnews_risk_label_ar=risk_label_ar,
         hd2_mnews_critical_trigger=critical_trigger,
         hd2_mnews_critical_reasons=critical_reasons,
+        nursing_protocol=nursing_protocol,
+        reassessment_interval_label_ar=reassessment_interval_label_ar(nursing_protocol),
+        required_response_time_label_ar=required_response_time_label_ar(nursing_protocol),
+        protocol_actions_ar=list(nursing_protocol["required_actions_ar"]),
     )
 
 

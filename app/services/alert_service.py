@@ -129,11 +129,12 @@ def close_alert(db: Session, alert_id: int) -> dict[str, object]:
 
 def _evaluate_alert_rule(assessment: News2Assessment, single_parameter_trigger: bool) -> dict[str, str] | None:
     if assessment.hd2_mnews_risk_color == "red":
+        protocol_summary = f" - {assessment.hd2_mnews_risk_label_ar}" if assessment.hd2_mnews_risk_label_ar else ""
         return {
             "risk_level": "high",
             "severity_level": "high",
             "priority": "immediate" if assessment.hd2_mnews_critical_trigger else "urgent",
-            "trigger_reason": "HD2-mNEWS automatic red" if assessment.hd2_mnews_critical_trigger else "HD2-mNEWS >= 7",
+            "trigger_reason": ("HD2-mNEWS automatic red" if assessment.hd2_mnews_critical_trigger else "HD2-mNEWS >= 7") + protocol_summary,
         }
     if assessment.total_score >= 7:
         return {

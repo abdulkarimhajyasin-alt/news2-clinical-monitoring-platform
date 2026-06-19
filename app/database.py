@@ -82,6 +82,13 @@ def ensure_runtime_columns() -> None:
                 "hd2_mnews_critical_trigger": "BOOLEAN",
                 "hd2_mnews_critical_reasons": "TEXT",
                 "hd2_mnews_breakdown_json": "TEXT",
+                "hd2_protocol_json": "TEXT",
+                "hd2_reassessment_interval_min": "INTEGER",
+                "hd2_reassessment_interval_max": "INTEGER",
+                "hd2_required_response_time_minutes": "INTEGER",
+                "hd2_requires_physician_call": "BOOLEAN",
+                "hd2_requires_emergency_preparation": "BOOLEAN",
+                "hd2_requires_close_monitoring": "BOOLEAN",
             },
         }
         for table_name, hd2_columns in hd2_columns_by_table.items():
@@ -114,3 +121,32 @@ def ensure_runtime_columns() -> None:
             for column_name, sql_type in baseline_columns.items():
                 if column_name not in table_columns:
                     connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {sql_type}"))
+
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS outcome_validations_72h (
+                    id INTEGER PRIMARY KEY,
+                    patient_id INTEGER NOT NULL,
+                    dialysis_session_id INTEGER NOT NULL,
+                    deterioration_occurred BOOLEAN NOT NULL,
+                    deterioration_types TEXT,
+                    type_specific_details TEXT,
+                    deterioration_timing_category VARCHAR(80),
+                    deterioration_time VARCHAR(20),
+                    deterioration_datetime TIMESTAMP,
+                    platform_prediction_status VARCHAR(80),
+                    interventions TEXT,
+                    doctor_response_time_minutes INTEGER,
+                    final_result VARCHAR(80),
+                    verification_sources TEXT,
+                    notes TEXT,
+                    completed_by_user_id INTEGER,
+                    completed_at TIMESTAMP NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    UNIQUE (dialysis_session_id)
+                )
+                """
+            )
+        )

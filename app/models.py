@@ -265,6 +265,30 @@ class IntradialyticMeasurement(Base):
     recorded_by: Mapped[User | None] = relationship(back_populates="recorded_measurements", foreign_keys=[recorded_by_user_id])
     news2_assessment: Mapped["News2Assessment | None"] = relationship(back_populates="measurement")
 
+    @property
+    def hd2_mnews_total_score(self) -> int | None:
+        return self.news2_assessment.hd2_mnews_total_score if self.news2_assessment else None
+
+    @property
+    def hd2_mnews_risk_color(self) -> str | None:
+        return self.news2_assessment.hd2_mnews_risk_color if self.news2_assessment else None
+
+    @property
+    def hd2_mnews_risk_label_ar(self) -> str | None:
+        return self.news2_assessment.hd2_mnews_risk_label_ar if self.news2_assessment else None
+
+    @property
+    def hd2_reassessment_interval_min(self) -> int | None:
+        return self.news2_assessment.hd2_reassessment_interval_min if self.news2_assessment else None
+
+    @property
+    def hd2_reassessment_interval_max(self) -> int | None:
+        return self.news2_assessment.hd2_reassessment_interval_max if self.news2_assessment else None
+
+    @property
+    def hd2_required_response_time_minutes(self) -> int | None:
+        return self.news2_assessment.hd2_required_response_time_minutes if self.news2_assessment else None
+
 
 class News2Assessment(Base):
     __tablename__ = "news2_assessments"
@@ -290,6 +314,13 @@ class News2Assessment(Base):
     hd2_mnews_critical_trigger: Mapped[bool | None] = mapped_column(Boolean)
     hd2_mnews_critical_reasons: Mapped[str | None] = mapped_column(Text)
     hd2_mnews_breakdown_json: Mapped[str | None] = mapped_column(Text)
+    hd2_protocol_json: Mapped[str | None] = mapped_column(Text)
+    hd2_reassessment_interval_min: Mapped[int | None] = mapped_column(Integer)
+    hd2_reassessment_interval_max: Mapped[int | None] = mapped_column(Integer)
+    hd2_required_response_time_minutes: Mapped[int | None] = mapped_column(Integer)
+    hd2_requires_physician_call: Mapped[bool | None] = mapped_column(Boolean)
+    hd2_requires_emergency_preparation: Mapped[bool | None] = mapped_column(Boolean)
+    hd2_requires_close_monitoring: Mapped[bool | None] = mapped_column(Boolean)
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
@@ -405,6 +436,29 @@ class ClinicalOutcome(Base):
 
     patient: Mapped[Patient] = relationship(back_populates="outcomes")
     clinical_deterioration_event: Mapped[ClinicalDeteriorationEvent] = relationship(back_populates="outcomes")
+
+
+class OutcomeValidation72h(Base, TimestampMixin):
+    __tablename__ = "outcome_validations_72h"
+    __table_args__ = (UniqueConstraint("dialysis_session_id", name="uq_outcome_validations_72h_session"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), nullable=False, index=True)
+    dialysis_session_id: Mapped[int] = mapped_column(ForeignKey("dialysis_sessions.id"), nullable=False, index=True)
+    deterioration_occurred: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    deterioration_types: Mapped[str | None] = mapped_column(Text)
+    type_specific_details: Mapped[str | None] = mapped_column(Text)
+    deterioration_timing_category: Mapped[str | None] = mapped_column(String(80))
+    deterioration_time: Mapped[str | None] = mapped_column(String(20))
+    deterioration_datetime: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    platform_prediction_status: Mapped[str | None] = mapped_column(String(80))
+    interventions: Mapped[str | None] = mapped_column(Text)
+    doctor_response_time_minutes: Mapped[int | None] = mapped_column(Integer)
+    final_result: Mapped[str | None] = mapped_column(String(80))
+    verification_sources: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[str | None] = mapped_column(Text)
+    completed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class ClinicalNote(Base, TimestampMixin):

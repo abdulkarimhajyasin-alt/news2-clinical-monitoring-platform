@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,6 +17,7 @@ from app.models import (
     DialysisSession,
     IntradialyticMeasurement,
     News2Assessment,
+    OutcomeValidation72h,
     Patient,
     PatientVascularAccess,
     ResponseTracking,
@@ -24,6 +26,7 @@ from app.models import (
     User,
     UserRole,
 )
+from app.services.hd2_protocol_service import build_hd2_nursing_protocol
 
 
 @pytest.fixture()
@@ -113,6 +116,7 @@ def export_client(tmp_path):
     )
     db.add_all([stable_measurement, high_measurement])
     db.flush()
+    hd2_protocol = build_hd2_nursing_protocol(8, "red", ["SpO2 <=91%"])
 
     stable_assessment = News2Assessment(
         patient_id=patient.id,
@@ -146,6 +150,18 @@ def export_client(tmp_path):
         risk_level="high",
         alert_required=True,
         trigger_reason="NEWS2 >= 7",
+        hd2_mnews_total_score=8,
+        hd2_mnews_risk_color="red",
+        hd2_mnews_risk_label_ar=hd2_protocol["risk_label_ar"],
+        hd2_mnews_critical_trigger=True,
+        hd2_mnews_critical_reasons=json.dumps(["SpO2 <=91%"], ensure_ascii=False),
+        hd2_protocol_json=json.dumps(hd2_protocol, ensure_ascii=False),
+        hd2_reassessment_interval_min=hd2_protocol["reassessment_interval_minutes_min"],
+        hd2_reassessment_interval_max=hd2_protocol["reassessment_interval_minutes_max"],
+        hd2_required_response_time_minutes=hd2_protocol["required_response_time_minutes"],
+        hd2_requires_physician_call=hd2_protocol["requires_physician_call"],
+        hd2_requires_emergency_preparation=hd2_protocol["requires_emergency_preparation"],
+        hd2_requires_close_monitoring=hd2_protocol["requires_close_monitoring"],
         created_by_user_id=user.id,
     )
     db.add_all([stable_assessment, high_assessment])
@@ -216,7 +232,24 @@ def export_client(tmp_path):
         time_to_action_minutes=9,
         total_response_time_minutes=10,
     )
-    db.add_all([response, outcome, tracking])
+    validation = OutcomeValidation72h(
+        patient_id=patient.id,
+        dialysis_session_id=session.id,
+        deterioration_occurred=True,
+        deterioration_types=json.dumps(["severe_hypotension"], ensure_ascii=False),
+        type_specific_details=json.dumps({"lowest_sbp": 82, "required_treatment": True}, ensure_ascii=False),
+        deterioration_timing_category="within_24_72h",
+        deterioration_datetime=datetime(2026, 6, 6, 8, 0, tzinfo=timezone.utc),
+        platform_prediction_status="predicted_before",
+        interventions=json.dumps(["doctor_called", "fluids_given"], ensure_ascii=False),
+        doctor_response_time_minutes=5,
+        final_result="partial_improvement",
+        verification_sources=json.dumps(["medical_record_reviewed"], ensure_ascii=False),
+        notes="72h validation complete.",
+        completed_by_user_id=user.id,
+        completed_at=datetime(2026, 6, 8, 12, 0, tzinfo=timezone.utc),
+    )
+    db.add_all([response, outcome, tracking, validation])
     db.commit()
     db.close()
 
@@ -256,6 +289,38 @@ def test_dataset_includes_required_core_fields(export_client):
 
     row = response.json()[0]
     assert {"patient_code", "session_date", "measurement_id", "news2_assessment_id", "news2_total_score", "risk_level"}.issubset(row.keys())
+
+
+def test_dataset_includes_hd2_protocol_fields(export_client):
+    response = export_client.get("/api/research/dataset", params={"risk_level": "high"})
+
+    assert response.status_code == 200
+    row = response.json()[0]
+    assert row["hd2_risk_color"] == "red"
+    assert row["hd2_risk_label_ar"] == "ط£ط­ظ…ط± - ط·ظˆط§ط±ط¦"
+    assert row["hd2_reassessment_interval_min"] == 5
+    assert row["hd2_required_response_time_minutes"] == 5
+    assert row["hd2_requires_physician_call"] is True
+    assert row["hd2_requires_emergency_preparation"] is True
+    assert row["hd2_requires_close_monitoring"] is True
+    assert row["hd2_protocol_action_summary"]
+
+
+def test_dataset_includes_72h_outcome_validation_fields(export_client):
+    response = export_client.get("/api/research/dataset", params={"risk_level": "high"})
+
+    assert response.status_code == 200
+    row = response.json()[0]
+    assert row["outcome_validation_completed"] is True
+    assert row["deterioration_occurred"] is True
+    assert row["deterioration_types_72h"] == "severe_hypotension"
+    assert row["platform_prediction_status"] == "predicted_before"
+    assert row["interventions_72h"] == "doctor_called | fluids_given"
+    assert row["doctor_response_time_minutes_72h"] == 5
+    assert row["final_result_72h"] == "partial_improvement"
+    assert row["verification_sources"] == "medical_record_reviewed"
+    assert row["severe_hypotension_lowest_sbp"] == 82
+    assert row["severe_hypotension_required_treatment"] is True
 
 
 def test_filters_work(export_client):

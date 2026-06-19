@@ -5,6 +5,7 @@ from datetime import date, datetime
 from io import BytesIO, StringIO
 import csv
 import html
+import json
 import zipfile
 
 from sqlalchemy.orm import Session
@@ -17,6 +18,7 @@ from app.models import (
     DialysisSession,
     IntradialyticMeasurement,
     News2Assessment,
+    OutcomeValidation72h,
     Patient,
     PatientVascularAccess,
     ResponseTracking,
@@ -86,6 +88,16 @@ DATASET_FIELDS = [
     "risk_level",
     "alert_required",
     "trigger_reason",
+    "hd2_mnews_total_score",
+    "hd2_risk_color",
+    "hd2_risk_label_ar",
+    "hd2_reassessment_interval_min",
+    "hd2_reassessment_interval_max",
+    "hd2_required_response_time_minutes",
+    "hd2_requires_physician_call",
+    "hd2_requires_emergency_preparation",
+    "hd2_requires_close_monitoring",
+    "hd2_protocol_action_summary",
     "alert_id",
     "alert_created",
     "alert_status",
@@ -121,6 +133,27 @@ DATASET_FIELDS = [
     "outcome_recorded_at",
     "outcome_window_hours",
     "outcome_description",
+    "outcome_validation_completed",
+    "outcome_validation_completed_at",
+    "deterioration_occurred",
+    "deterioration_types_72h",
+    "deterioration_timing_category",
+    "platform_prediction_status",
+    "interventions_72h",
+    "doctor_response_time_minutes_72h",
+    "final_result_72h",
+    "verification_sources",
+    "severe_hypotension_lowest_sbp",
+    "severe_hypotension_required_treatment",
+    "arrhythmia_type",
+    "potassium_value",
+    "vascular_complication_type",
+    "neurological_type",
+    "emergency_admission_datetime",
+    "emergency_admission_reason",
+    "icu_transfer_datetime",
+    "death_datetime",
+    "death_reason",
 ]
 
 
@@ -144,10 +177,23 @@ VARIABLE_LABELS = {
     "measurement_time": "Vital-sign measurement timestamp",
     "news2_total_score": "NEWS2 total score",
     "risk_level": "NEWS2 risk level",
+    "hd2_mnews_total_score": "HD2-mNEWS total score",
+    "hd2_risk_color": "HD2-mNEWS risk color",
+    "hd2_risk_label_ar": "HD2-mNEWS Arabic risk label",
+    "hd2_reassessment_interval_min": "HD2 protocol minimum reassessment interval in minutes",
+    "hd2_reassessment_interval_max": "HD2 protocol maximum reassessment interval in minutes",
+    "hd2_required_response_time_minutes": "HD2 required response time in minutes",
+    "hd2_requires_physician_call": "HD2 protocol physician call required flag",
+    "hd2_requires_emergency_preparation": "HD2 protocol emergency preparation required flag",
+    "hd2_requires_close_monitoring": "HD2 protocol close monitoring required flag",
+    "hd2_protocol_action_summary": "HD2 protocol nursing action summary",
     "alert_created": "Whether a NEWS2 alert was created",
     "deterioration_type": "Clinical deterioration type",
     "response_delay_minutes": "Minutes from digital alert to response start",
     "outcome_type": "Clinical outcome category",
+    "outcome_validation_completed": "Whether the 72-hour clinical outcome validation form was completed",
+    "platform_prediction_status": "Whether the platform predicted deterioration before or during occurrence",
+    "final_result_72h": "Final 72-hour validation result",
 }
 
 
@@ -194,13 +240,14 @@ def build_research_dataset(db: Session, filters: dict[str, object] | None = None
             if event
             else None
         )
+        validation = db.query(OutcomeValidation72h).filter(OutcomeValidation72h.dialysis_session_id == assessment.dialysis_session_id).first()
         access = (
             db.query(PatientVascularAccess)
             .filter(PatientVascularAccess.patient_id == patient.id)
             .order_by(PatientVascularAccess.inserted_at.desc().nullslast(), PatientVascularAccess.id.desc())
             .first()
         )
-        row = _dataset_row(patient, session, access, measurement, assessment, alert, event, response, tracking, outcome)
+        row = _dataset_row(patient, session, access, measurement, assessment, alert, event, response, tracking, outcome, validation)
         if _matches_filters(row, filters):
             rows.append(_public_row(row))
             if limit is not None and len(rows) >= limit:
@@ -372,7 +419,9 @@ def _dataset_row(
     response: ClinicalResponse | None,
     tracking: ResponseTracking | None,
     outcome: ClinicalOutcome | None,
+    validation: OutcomeValidation72h | None = None,
 ) -> dict[str, object]:
+    validation_details = _json_dict(validation.type_specific_details) if validation else {}
     return {
         "_patient_id": patient.id,
         "patient_code": patient.patient_code,
@@ -437,6 +486,16 @@ def _dataset_row(
         "risk_level": assessment.risk_level,
         "alert_required": assessment.alert_required,
         "trigger_reason": assessment.trigger_reason,
+        "hd2_mnews_total_score": assessment.hd2_mnews_total_score,
+        "hd2_risk_color": assessment.hd2_mnews_risk_color,
+        "hd2_risk_label_ar": assessment.hd2_mnews_risk_label_ar,
+        "hd2_reassessment_interval_min": assessment.hd2_reassessment_interval_min,
+        "hd2_reassessment_interval_max": assessment.hd2_reassessment_interval_max,
+        "hd2_required_response_time_minutes": assessment.hd2_required_response_time_minutes,
+        "hd2_requires_physician_call": assessment.hd2_requires_physician_call,
+        "hd2_requires_emergency_preparation": assessment.hd2_requires_emergency_preparation,
+        "hd2_requires_close_monitoring": assessment.hd2_requires_close_monitoring,
+        "hd2_protocol_action_summary": _hd2_protocol_action_summary(assessment.hd2_protocol_json),
         "alert_id": alert.id if alert else None,
         "alert_created": alert is not None,
         "alert_status": alert.status if alert else None,
@@ -472,6 +531,27 @@ def _dataset_row(
         "outcome_recorded_at": outcome.outcome_recorded_at if outcome else None,
         "outcome_window_hours": outcome.outcome_window_hours if outcome else None,
         "outcome_description": outcome.description if outcome else None,
+        "outcome_validation_completed": validation is not None,
+        "outcome_validation_completed_at": validation.completed_at if validation else None,
+        "deterioration_occurred": validation.deterioration_occurred if validation else None,
+        "deterioration_types_72h": _join_json_list(validation.deterioration_types if validation else None),
+        "deterioration_timing_category": validation.deterioration_timing_category if validation else None,
+        "platform_prediction_status": validation.platform_prediction_status if validation else None,
+        "interventions_72h": _join_json_list(validation.interventions if validation else None),
+        "doctor_response_time_minutes_72h": validation.doctor_response_time_minutes if validation else None,
+        "final_result_72h": validation.final_result if validation else None,
+        "verification_sources": _join_json_list(validation.verification_sources if validation else None),
+        "severe_hypotension_lowest_sbp": validation_details.get("lowest_sbp"),
+        "severe_hypotension_required_treatment": validation_details.get("required_treatment"),
+        "arrhythmia_type": validation_details.get("arrhythmia_type"),
+        "potassium_value": validation_details.get("potassium_value"),
+        "vascular_complication_type": validation_details.get("vascular_complication_type"),
+        "neurological_type": validation_details.get("neurological_type"),
+        "emergency_admission_datetime": validation_details.get("emergency_admission_datetime"),
+        "emergency_admission_reason": validation_details.get("emergency_admission_reason"),
+        "icu_transfer_datetime": validation_details.get("icu_transfer_datetime"),
+        "death_datetime": validation_details.get("death_datetime"),
+        "death_reason": validation_details.get("death_reason"),
     }
 
 
@@ -511,6 +591,41 @@ def _invalid_timestamp_sequence(row: dict[str, object]) -> bool:
 
 def _public_row(row: dict[str, object]) -> dict[str, object]:
     return {key: value for key, value in row.items() if not key.startswith("_")}
+
+
+def _hd2_protocol_action_summary(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        protocol = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+    actions = protocol.get("required_actions_ar") if isinstance(protocol, dict) else None
+    if not isinstance(actions, list):
+        return None
+    return " | ".join(str(action) for action in actions)
+
+
+def _join_json_list(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        loaded = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(loaded, list):
+        return None
+    return " | ".join(str(item) for item in loaded)
+
+
+def _json_dict(value: str | None) -> dict[str, object]:
+    if not value:
+        return {}
+    try:
+        loaded = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def _as_naive(value: datetime) -> datetime:
