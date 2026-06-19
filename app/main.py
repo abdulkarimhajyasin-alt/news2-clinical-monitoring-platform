@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
-from app.routers import admin, alerts, auth, deterioration, dialysis_sessions, hd2_mnews, health, monitoring, news2, outcome_validations, outcomes, patients, rbac, research, research_analytics, research_exports, response_tracking, responses, studies, users
+from app.routers import admin, alerts, auth, deterioration, dialysis_sessions, hd2_mnews, health, monitoring, news2, outcome_validations, outcomes, patients, rbac, research, research_analytics, research_evaluation, research_exports, response_tracking, responses, studies, users
 from app.startup import initialize_application_database
 
 
@@ -32,6 +32,7 @@ app.include_router(alerts.router)
 app.include_router(research.router)
 app.include_router(research_exports.router)
 app.include_router(research_analytics.router)
+app.include_router(research_evaluation.router)
 app.include_router(monitoring.router)
 app.include_router(news2.router)
 app.include_router(hd2_mnews.router)

@@ -23,6 +23,7 @@ from app.models import (
     PatientVascularAccess,
     ResponseTracking,
 )
+from app.services.research_evaluation_service import prediction_export_fields_for_session
 
 
 DATASET_FIELDS = [
@@ -154,6 +155,16 @@ DATASET_FIELDS = [
     "icu_transfer_datetime",
     "death_datetime",
     "death_reason",
+    "prediction_classification",
+    "true_positive_early",
+    "true_positive_concurrent",
+    "false_negative",
+    "true_negative",
+    "false_positive",
+    "sensitivity_group_marker",
+    "specificity_group_marker",
+    "early_detection_marker",
+    "classification_reason",
 ]
 
 
@@ -194,6 +205,8 @@ VARIABLE_LABELS = {
     "outcome_validation_completed": "Whether the 72-hour clinical outcome validation form was completed",
     "platform_prediction_status": "Whether the platform predicted deterioration before or during occurrence",
     "final_result_72h": "Final 72-hour validation result",
+    "prediction_classification": "Prediction accuracy classification for the dialysis session",
+    "classification_reason": "Reason used for prediction accuracy classification",
 }
 
 
@@ -247,7 +260,8 @@ def build_research_dataset(db: Session, filters: dict[str, object] | None = None
             .order_by(PatientVascularAccess.inserted_at.desc().nullslast(), PatientVascularAccess.id.desc())
             .first()
         )
-        row = _dataset_row(patient, session, access, measurement, assessment, alert, event, response, tracking, outcome, validation)
+        prediction_fields = prediction_export_fields_for_session(db, assessment.dialysis_session_id)
+        row = _dataset_row(patient, session, access, measurement, assessment, alert, event, response, tracking, outcome, validation, prediction_fields)
         if _matches_filters(row, filters):
             rows.append(_public_row(row))
             if limit is not None and len(rows) >= limit:
@@ -420,8 +434,10 @@ def _dataset_row(
     tracking: ResponseTracking | None,
     outcome: ClinicalOutcome | None,
     validation: OutcomeValidation72h | None = None,
+    prediction_fields: dict[str, object] | None = None,
 ) -> dict[str, object]:
     validation_details = _json_dict(validation.type_specific_details) if validation else {}
+    prediction_fields = prediction_fields or {}
     return {
         "_patient_id": patient.id,
         "patient_code": patient.patient_code,
@@ -552,6 +568,16 @@ def _dataset_row(
         "icu_transfer_datetime": validation_details.get("icu_transfer_datetime"),
         "death_datetime": validation_details.get("death_datetime"),
         "death_reason": validation_details.get("death_reason"),
+        "prediction_classification": prediction_fields.get("prediction_classification"),
+        "true_positive_early": prediction_fields.get("true_positive_early"),
+        "true_positive_concurrent": prediction_fields.get("true_positive_concurrent"),
+        "false_negative": prediction_fields.get("false_negative"),
+        "true_negative": prediction_fields.get("true_negative"),
+        "false_positive": prediction_fields.get("false_positive"),
+        "sensitivity_group_marker": prediction_fields.get("sensitivity_group_marker"),
+        "specificity_group_marker": prediction_fields.get("specificity_group_marker"),
+        "early_detection_marker": prediction_fields.get("early_detection_marker"),
+        "classification_reason": prediction_fields.get("classification_reason"),
     }
 
 

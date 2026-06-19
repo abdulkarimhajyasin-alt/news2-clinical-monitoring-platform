@@ -32,6 +32,7 @@ def test_sidebar_navigation_keeps_research_monitoring_scope():
         "export-center",
         "research-dashboard",
         "study-metrics",
+        "prediction-evaluation",
         "dataset-statistics",
         "study-management",
         "users",

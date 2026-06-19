@@ -30,6 +30,7 @@ const routes = [
   { id: "research-dashboard", label: "لوحة البحث", group: "البحث", icon: "R", type: "research" },
   { id: "pre-post-comparison", label: "مقارنة قبل وبعد", group: "البحث", icon: "PP", type: "comparison" },
   { id: "study-metrics", label: "مؤشرات الدراسة", group: "البحث", icon: "SM", type: "analytics" },
+  { id: "prediction-evaluation", label: "تقييم التنبؤ", group: "البحث", icon: "PE", type: "analytics" },
   { id: "dataset-statistics", label: "إحصاءات البيانات", group: "البحث", icon: "DS", type: "analytics" },
   { id: "export-center", label: "مركز التصدير", group: "البحث", icon: "EX", type: "export" },
   { id: "users", label: "المستخدمون", group: "الإدارة", icon: "U", type: "table", entity: "users" },
@@ -71,6 +72,7 @@ const ROUTE_LABEL_OVERRIDES = {
   "outcome-tracking": "تتبع النتيجة",
   "research-dashboard": "التحليل البحثي",
   "study-metrics": "مؤشرات البحث",
+  "prediction-evaluation": "تقييم التنبؤ",
   "dataset-statistics": "جودة البيانات",
   "export-center": "بيانات البحث",
   "study-management": "بروتوكول الدراسة",
@@ -147,6 +149,7 @@ const NAV_GROUPS = [
     children: [
       { route: "research-dashboard" },
       { route: "study-metrics", permission: "research:analytics" },
+      { route: "prediction-evaluation", permission: "research:analytics" },
       { route: "dataset-statistics", permission: "research:view" }
     ]
   },
@@ -195,6 +198,7 @@ const NAV_ROUTE_LABELS = {
   "research-dashboard": "التحليل البحثي",
   "pre-post-comparison": "مقارنة قبل وبعد",
   "study-metrics": "مؤشرات البحث",
+  "prediction-evaluation": "تقييم التنبؤ",
   "dataset-statistics": "جودة البيانات",
   "export-center": "بيانات البحث",
   "study-management": "بروتوكول الدراسة",
@@ -237,6 +241,11 @@ const appState = {
   researchDatasetQuality: null,
   researchExportFilters: {},
   researchAnalyticsSummary: null,
+  predictionEvaluationSummary: null,
+  predictionEvaluationRows: [],
+  predictionEvaluationByRiskColor: [],
+  predictionEvaluationByDeteriorationType: [],
+  predictionEvaluationResponseTime: null,
   studies: [],
   staffUsers: [],
   selectedStudyId: null,
@@ -465,6 +474,21 @@ const api = {
   },
   getResearchAnalyticsSummary() {
     return this.request("/api/research/analytics/summary").then(normalizeResearchAnalyticsSummary);
+  },
+  getPredictionEvaluationSummary() {
+    return this.request("/api/research/evaluation/prediction-summary");
+  },
+  getPredictionEvaluationRows() {
+    return this.request("/api/research/evaluation/prediction-dataset");
+  },
+  getPredictionEvaluationByRiskColor() {
+    return this.request("/api/research/evaluation/by-risk-color");
+  },
+  getPredictionEvaluationByDeteriorationType() {
+    return this.request("/api/research/evaluation/by-deterioration-type");
+  },
+  getPredictionEvaluationResponseTime() {
+    return this.request("/api/research/evaluation/response-time-summary");
   },
   getStudies() {
     return this.request("/api/studies").then((rows) => rows.map(normalizeStudy));
@@ -1554,6 +1578,13 @@ function ensureDataForRoute(route) {
   }
   if (route.id === "study-metrics" && !appState.researchAnalyticsSummary && !appState.loading.researchAnalyticsSummary) {
     loadResource("researchAnalyticsSummary", api.getResearchAnalyticsSummary.bind(api));
+  }
+  if (route.id === "prediction-evaluation") {
+    if (!appState.predictionEvaluationSummary && !appState.loading.predictionEvaluationSummary) loadResource("predictionEvaluationSummary", api.getPredictionEvaluationSummary.bind(api));
+    if (!appState.predictionEvaluationRows.length && !appState.loading.predictionEvaluationRows) loadResource("predictionEvaluationRows", api.getPredictionEvaluationRows.bind(api));
+    if (!appState.predictionEvaluationByRiskColor.length && !appState.loading.predictionEvaluationByRiskColor) loadResource("predictionEvaluationByRiskColor", api.getPredictionEvaluationByRiskColor.bind(api));
+    if (!appState.predictionEvaluationByDeteriorationType.length && !appState.loading.predictionEvaluationByDeteriorationType) loadResource("predictionEvaluationByDeteriorationType", api.getPredictionEvaluationByDeteriorationType.bind(api));
+    if (!appState.predictionEvaluationResponseTime && !appState.loading.predictionEvaluationResponseTime) loadResource("predictionEvaluationResponseTime", api.getPredictionEvaluationResponseTime.bind(api));
   }
   if (route.type === "study" && !appState.studyCenter && !appState.loading.studyCenter) {
     loadResource("studyCenter", loadStudyCenter);
@@ -3251,6 +3282,7 @@ function responseTone(value) {
 
 function renderAnalytics(route) {
   if (route.id === "study-metrics") return renderResearchAnalyticsDashboard();
+  if (route.id === "prediction-evaluation") return renderPredictionEvaluation();
   if (route.id === "response-time-dashboard") return renderResponseTimeDashboard();
   if (route.id === "response-analytics") return renderResponseAnalytics();
   if (route.id === "outcome-analytics") return renderOutcomeAnalytics();
@@ -3515,6 +3547,70 @@ function downloadResearchExport(format) {
   const endpoint = endpoints[format];
   if (!endpoint) return;
   window.location.href = `${endpoint}${queryString(appState.researchExportFilters || {})}`;
+}
+
+function renderPredictionEvaluation() {
+  if (appState.loading.predictionEvaluationSummary || appState.loading.predictionEvaluationRows) return loadingBlock("جاري تحميل تقييم التنبؤ...");
+  const summary = appState.predictionEvaluationSummary || {};
+  const rows = appState.predictionEvaluationRows || [];
+  if (!summary.total_sessions && !rows.length) return emptyBlock("لا توجد جلسات مؤهلة لتقييم التنبؤ حتى الآن");
+  return `<div class="grid cols-4">
+    ${renderKpi(["الجلسات المؤهلة", summary.total_sessions ?? 0, "جلسات غير محذوفة", "info"])}
+    ${renderKpi(["تم التحقق بعد 72 ساعة", summary.validated_sessions ?? 0, `${summary.unvalidated_sessions ?? 0} غير مكتملة`, "success"])}
+    ${renderKpi(["حالات التدهور", summary.deteriorated_sessions ?? 0, "حسب تحقق 72 ساعة", "warning"])}
+    ${renderKpi(["التنبؤ المبكر الصحيح", summary.true_positive_early ?? 0, "True Positive Early", "success"])}
+    ${renderKpi(["التنبؤ المتزامن الصحيح", summary.true_positive_concurrent ?? 0, "True Positive Concurrent", "info"])}
+    ${renderKpi(["الحالات السلبية الكاذبة", summary.false_negative ?? 0, "False Negative", (summary.false_negative || 0) ? "danger" : "success"])}
+    ${renderKpi(["الحساسية", percentText(summary.sensitivity), "TP / TP+FN", "info"])}
+    ${renderKpi(["النوعية", percentText(summary.specificity), "TN / TN+FP", "info"])}
+  </div>
+  <div class="grid cols-2" style="margin-top:16px">
+    ${card("مؤشرات دقة التنبؤ", renderTable(["المؤشر", "القيمة"], [["القيمة التنبؤية الموجبة", percentText(summary.positive_predictive_value)], ["القيمة التنبؤية السالبة", percentText(summary.negative_predictive_value)], ["معدل الكشف المبكر", percentText(summary.early_detection_rate)], ["معدل السلبية الكاذبة", percentText(summary.false_negative_rate)], ["معدل الإيجابية الكاذبة", percentText(summary.false_positive_rate)]]))}
+    ${card("ملخص زمن استجابة الطبيب", renderPredictionResponseTimeTable(appState.predictionEvaluationResponseTime || {}))}
+  </div>
+  <div class="grid cols-2" style="margin-top:16px">
+    ${card("تحليل حسب لون الخطورة", renderPredictionGroupTable(appState.predictionEvaluationByRiskColor || [], "risk_color"))}
+    ${card("تحليل حسب نوع التدهور", renderPredictionGroupTable(appState.predictionEvaluationByDeteriorationType || [], "deterioration_type"))}
+  </div>
+  <div style="margin-top:16px">${card("جدول تصنيف الجلسات", renderPredictionDatasetTable(rows))}</div>`;
+}
+
+function renderPredictionDatasetTable(rows) {
+  if (!rows.length) return emptyBlock("لا توجد تصنيفات متاحة");
+  return renderTable(["المريض", "الجلسة", "HD2", "لون الخطورة", "تنبيه أحمر", "تدهور", "حالة التنبؤ", "التصنيف", "السبب"], rows.slice(0, 30).map((row) => [
+    row.patient_code || "-",
+    row.session_date || row.session_id,
+    row.hd2_mnews_total_score ?? "-",
+    row.hd2_risk_color || "-",
+    row.red_alert_present ? "نعم" : "لا",
+    row.deterioration_occurred === true ? "نعم" : row.deterioration_occurred === false ? "لا" : "-",
+    row.prediction_status_from_validation || "-",
+    row.prediction_classification || "-",
+    row.classification_reason || "-"
+  ]));
+}
+
+function renderPredictionGroupTable(rows, key) {
+  if (!rows.length) return emptyBlock("لا توجد بيانات كافية للتجميع");
+  return renderTable(["المجموعة", "الجلسات", "متحقق", "TP مبكر", "TP متزامن", "FN", "TN", "FP", "غير مكتمل"], rows.map((row) => [
+    row[key] || "-",
+    row.total_sessions ?? 0,
+    row.validated_sessions ?? 0,
+    row.true_positive_early ?? 0,
+    row.true_positive_concurrent ?? 0,
+    row.false_negative ?? 0,
+    row.true_negative ?? 0,
+    row.false_positive ?? 0,
+    row.incomplete ?? 0
+  ]));
+}
+
+function renderPredictionResponseTimeTable(summary) {
+  return renderTable(["المؤشر", "القيمة"], [["عدد السجلات", summary.records_with_doctor_response_time ?? 0], ["المتوسط", minuteText(summary.average_minutes)], ["الوسيط", minuteText(summary.median_minutes)], ["الأسرع", minuteText(summary.fastest_minutes)], ["الأبطأ", minuteText(summary.slowest_minutes)]]);
+}
+
+function percentText(value) {
+  return value === null || value === undefined ? "-" : `${value}%`;
 }
 
 function renderResearchAnalyticsDashboard() {

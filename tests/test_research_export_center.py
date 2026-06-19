@@ -323,6 +323,26 @@ def test_dataset_includes_72h_outcome_validation_fields(export_client):
     assert row["severe_hypotension_required_treatment"] is True
 
 
+def test_dataset_includes_prediction_classification_fields(export_client):
+    response = export_client.get("/api/research/dataset", params={"risk_level": "high"})
+
+    assert response.status_code == 200
+    row = response.json()[0]
+    assert row["prediction_classification"] == "true_positive_early"
+    assert row["true_positive_early"] is True
+    assert row["early_detection_marker"] is True
+    assert row["sensitivity_group_marker"] is True
+    assert row["classification_reason"]
+
+
+def test_csv_export_includes_prediction_classification_fields(export_client):
+    response = export_client.get("/api/research/export/csv")
+
+    assert response.status_code == 200
+    assert "prediction_classification" in response.text
+    assert "true_positive_early" in response.text
+
+
 def test_filters_work(export_client):
     response = export_client.get("/api/research/dataset", params={"risk_level": "high"})
 
