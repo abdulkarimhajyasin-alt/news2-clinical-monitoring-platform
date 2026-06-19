@@ -504,6 +504,34 @@ class ResearchStudy(Base, TimestampMixin):
     status: Mapped[str | None] = mapped_column(String(40), default=ResearchStudyStatus.draft)
 
 
+class StaffTrainingEvaluation(Base, TimestampMixin):
+    __tablename__ = "staff_training_evaluations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    staff_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
+    staff_name: Mapped[str | None] = mapped_column(String(160))
+    staff_role: Mapped[str] = mapped_column(String(40), nullable=False)
+    study_id: Mapped[int | None] = mapped_column(ForeignKey("research_studies.id"), index=True)
+    training_date: Mapped[date] = mapped_column(Date, nullable=False)
+    pre_test_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    pre_test_total: Mapped[int] = mapped_column(Integer, nullable=False)
+    post_test_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    post_test_total: Mapped[int] = mapped_column(Integer, nullable=False)
+    knowledge_improvement_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    knowledge_improvement_percent: Mapped[float] = mapped_column(Float, nullable=False)
+    competency_items_json: Mapped[str | None] = mapped_column(Text)
+    competency_passed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    competency_score: Mapped[float] = mapped_column(Float, nullable=False)
+    competency_notes: Mapped[str | None] = mapped_column(Text)
+    acceptance_survey_json: Mapped[str | None] = mapped_column(Text)
+    acceptance_total_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    acceptance_mean_score: Mapped[float] = mapped_column(Float, nullable=False)
+    acceptance_level: Mapped[str] = mapped_column(String(40), nullable=False)
+    general_notes: Mapped[str | None] = mapped_column(Text)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 

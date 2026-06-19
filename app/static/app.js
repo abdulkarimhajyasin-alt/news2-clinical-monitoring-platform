@@ -51,6 +51,18 @@ routes.splice(
   { id: "study-readiness", label: "جاهزية الدراسة", group: "البحث", icon: "SR", type: "study" }
 );
 
+routes.splice(
+  routes.findIndex((route) => route.id === "dataset-statistics"),
+  0,
+  { id: "nursing-training", label: "تدريب التمريض", group: "البحث", icon: "NT", type: "analytics" }
+);
+
+routes.splice(
+  routes.findIndex((route) => route.id === "users"),
+  0,
+  { id: "alignment-audit", label: "تدقيق مطابقة الرسالة", group: "البحث", icon: "AA", type: "analytics" }
+);
+
 const ROUTE_LABEL_OVERRIDES = {
   dashboard: "الرئيسية",
   patients: "المرضى",
@@ -167,6 +179,15 @@ const NAV_GROUPS = [
   }
 ];
 
+const trainingNavGroup = NAV_GROUPS.find((group) => (group.children || []).some((child) => child.route === "prediction-evaluation"));
+if (trainingNavGroup && !trainingNavGroup.children.some((child) => child.route === "nursing-training")) {
+  const predictionIndex = trainingNavGroup.children.findIndex((child) => child.route === "prediction-evaluation");
+  trainingNavGroup.children.splice(predictionIndex + 1, 0, { route: "nursing-training", permission: "research:view" });
+}
+if (trainingNavGroup && !trainingNavGroup.children.some((child) => child.route === "alignment-audit")) {
+  trainingNavGroup.children.push({ route: "alignment-audit", permission: "research:view" });
+}
+
 const NAV_ROUTE_LABELS = {
   patients: "المرضى",
   "create-patient": "إضافة مريض",
@@ -213,6 +234,11 @@ const NAV_ROUTE_LABELS = {
   "language-settings": "إعدادات اللغة"
 };
 
+ROUTE_LABEL_OVERRIDES["nursing-training"] = "تدريب التمريض";
+NAV_ROUTE_LABELS["nursing-training"] = "تدريب التمريض";
+ROUTE_LABEL_OVERRIDES["alignment-audit"] = "تدقيق مطابقة الرسالة";
+NAV_ROUTE_LABELS["alignment-audit"] = "تدقيق مطابقة الرسالة";
+
 const appState = {
   health: null,
   patients: [],
@@ -246,6 +272,10 @@ const appState = {
   predictionEvaluationByRiskColor: [],
   predictionEvaluationByDeteriorationType: [],
   predictionEvaluationResponseTime: null,
+  trainingEvaluations: [],
+  trainingSummary: null,
+  trainingSubmission: null,
+  alignmentAudit: null,
   studies: [],
   staffUsers: [],
   selectedStudyId: null,
@@ -489,6 +519,22 @@ const api = {
   },
   getPredictionEvaluationResponseTime() {
     return this.request("/api/research/evaluation/response-time-summary");
+  },
+  getTrainingEvaluations(filters = {}) {
+    return this.request(`/api/training/evaluations${queryString(filters)}`).then((rows) => rows.map(normalizeTrainingEvaluation));
+  },
+  getTrainingSummary() {
+    return this.request("/api/training/summary").then(normalizeTrainingSummary);
+  },
+  createTrainingEvaluation(payload) {
+    return this.request("/api/training/evaluations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+  },
+  getAlignmentAudit() {
+    return this.request("/api/research/alignment-audit").then(normalizeAlignmentAudit);
   },
   getStudies() {
     return this.request("/api/studies").then((rows) => rows.map(normalizeStudy));
@@ -954,6 +1000,74 @@ function normalizeOutcomeSummary(row) {
     emergencyDepartmentTransferCount: row?.emergency_department_transfer_count ?? 0,
     icuAdmissionCount: row?.icu_admission_count ?? 0,
     deathCount: row?.death_count ?? 0
+  };
+}
+
+function normalizeTrainingEvaluation(row) {
+  return {
+    id: row.id,
+    staffUserId: row.staff_user_id ?? null,
+    staffName: row.staff_name || "-",
+    staffRole: row.staff_role || "-",
+    studyId: row.study_id ?? null,
+    trainingDate: row.training_date || null,
+    preTestScore: row.pre_test_score ?? 0,
+    preTestTotal: row.pre_test_total ?? 0,
+    postTestScore: row.post_test_score ?? 0,
+    postTestTotal: row.post_test_total ?? 0,
+    preTestPercent: row.pre_test_percent ?? 0,
+    postTestPercent: row.post_test_percent ?? 0,
+    knowledgeImprovementScore: row.knowledge_improvement_score ?? 0,
+    knowledgeImprovementPercent: row.knowledge_improvement_percent ?? 0,
+    competencyItems: row.competency_items || {},
+    competencyPassed: Boolean(row.competency_passed),
+    competencyScore: row.competency_score ?? 0,
+    competencyNotes: row.competency_notes || "",
+    acceptanceSurvey: row.acceptance_survey || {},
+    acceptanceTotalScore: row.acceptance_total_score ?? 0,
+    acceptanceMeanScore: row.acceptance_mean_score ?? 0,
+    acceptanceLevel: row.acceptance_level || "low",
+    acceptanceLevelLabelAr: row.acceptance_level_label_ar || row.acceptance_level || "-",
+    generalNotes: row.general_notes || "",
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null
+  };
+}
+
+function normalizeTrainingSummary(row) {
+  return {
+    totalEvaluatedStaff: row?.total_evaluated_staff ?? 0,
+    averagePreTestPercent: row?.average_pre_test_percent ?? null,
+    averagePostTestPercent: row?.average_post_test_percent ?? null,
+    averageKnowledgeImprovementPercent: row?.average_knowledge_improvement_percent ?? null,
+    competencyPassRatePercent: row?.competency_pass_rate_percent ?? null,
+    averageCompetencyScore: row?.average_competency_score ?? null,
+    averageAcceptanceScore: row?.average_acceptance_score ?? null,
+    acceptanceLevelCounts: row?.acceptance_level_counts || { low: 0, medium: 0, high: 0 }
+  };
+}
+
+function normalizeAlignmentAudit(row) {
+  return {
+    summary: {
+      totalRequirements: row?.summary?.total_requirements ?? 0,
+      completionPercentage: row?.summary?.completion_percentage ?? 0,
+      implementedCount: row?.summary?.implemented_count ?? 0,
+      partialCount: row?.summary?.partial_count ?? 0,
+      missingCount: row?.summary?.missing_count ?? 0,
+      outOfScopeCount: row?.summary?.out_of_scope_count ?? 0
+    },
+    rows: (row?.rows || []).map((item) => ({
+      requirementKey: item.requirement_key,
+      arabicLabel: item.arabic_label,
+      technicalLabel: item.technical_label,
+      sourceDocumentCategory: item.source_document_category,
+      status: item.status,
+      relatedApiRoute: item.related_api_route,
+      relatedFrontendRoute: item.related_frontend_route,
+      relatedExportFields: item.related_export_fields || [],
+      notes: item.notes || ""
+    }))
   };
 }
 
@@ -1585,6 +1699,13 @@ function ensureDataForRoute(route) {
     if (!appState.predictionEvaluationByRiskColor.length && !appState.loading.predictionEvaluationByRiskColor) loadResource("predictionEvaluationByRiskColor", api.getPredictionEvaluationByRiskColor.bind(api));
     if (!appState.predictionEvaluationByDeteriorationType.length && !appState.loading.predictionEvaluationByDeteriorationType) loadResource("predictionEvaluationByDeteriorationType", api.getPredictionEvaluationByDeteriorationType.bind(api));
     if (!appState.predictionEvaluationResponseTime && !appState.loading.predictionEvaluationResponseTime) loadResource("predictionEvaluationResponseTime", api.getPredictionEvaluationResponseTime.bind(api));
+  }
+  if (route.id === "nursing-training") {
+    if (!appState.trainingEvaluations.length && !appState.loading.trainingEvaluations) loadResource("trainingEvaluations", api.getTrainingEvaluations.bind(api));
+    if (!appState.trainingSummary && !appState.loading.trainingSummary) loadResource("trainingSummary", api.getTrainingSummary.bind(api));
+  }
+  if (route.id === "alignment-audit" && !appState.alignmentAudit && !appState.loading.alignmentAudit) {
+    loadResource("alignmentAudit", api.getAlignmentAudit.bind(api));
   }
   if (route.type === "study" && !appState.studyCenter && !appState.loading.studyCenter) {
     loadResource("studyCenter", loadStudyCenter);
@@ -3044,6 +3165,40 @@ async function submitOutcomeValidation72h(event) {
   }
 }
 
+async function submitTrainingEvaluation(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  const competencyItems = Object.fromEntries(Object.keys(TRAINING_COMPETENCY_ITEMS).map((key) => [key, data.get(`competency_${key}`) === "on"]));
+  const acceptanceSurvey = Object.fromEntries(Object.keys(TRAINING_ACCEPTANCE_ITEMS).map((key) => [key, Number(data.get(`acceptance_${key}`))]));
+  const payload = {
+    staff_name: data.get("staff_name"),
+    staff_role: data.get("staff_role"),
+    training_date: data.get("training_date"),
+    pre_test_score: Number(data.get("pre_test_score")),
+    pre_test_total: Number(data.get("pre_test_total")),
+    post_test_score: Number(data.get("post_test_score")),
+    post_test_total: Number(data.get("post_test_total")),
+    competency_items: competencyItems,
+    competency_notes: data.get("competency_notes") || null,
+    acceptance_survey: acceptanceSurvey,
+    general_notes: data.get("general_notes") || null,
+    created_by_user_id: appState.currentUser?.id || null
+  };
+  appState.loading.trainingSubmission = true;
+  appState.errors.trainingSubmission = null;
+  render();
+  try {
+    appState.trainingSubmission = await api.createTrainingEvaluation(payload);
+    appState.trainingEvaluations = await api.getTrainingEvaluations();
+    appState.trainingSummary = await api.getTrainingSummary();
+  } catch (error) {
+    appState.errors.trainingSubmission = error.message || "تعذر حفظ تقييم التدريب";
+  } finally {
+    appState.loading.trainingSubmission = false;
+    render();
+  }
+}
+
 function toggleOutcomeValidationDetails(value) {
   document.querySelectorAll(".outcome-validation-yes").forEach((node) => {
     node.hidden = value !== "yes";
@@ -3283,6 +3438,8 @@ function responseTone(value) {
 function renderAnalytics(route) {
   if (route.id === "study-metrics") return renderResearchAnalyticsDashboard();
   if (route.id === "prediction-evaluation") return renderPredictionEvaluation();
+  if (route.id === "nursing-training") return renderNursingTraining();
+  if (route.id === "alignment-audit") return renderAlignmentAudit();
   if (route.id === "response-time-dashboard") return renderResponseTimeDashboard();
   if (route.id === "response-analytics") return renderResponseAnalytics();
   if (route.id === "outcome-analytics") return renderOutcomeAnalytics();
@@ -3607,6 +3764,129 @@ function renderPredictionGroupTable(rows, key) {
 
 function renderPredictionResponseTimeTable(summary) {
   return renderTable(["المؤشر", "القيمة"], [["عدد السجلات", summary.records_with_doctor_response_time ?? 0], ["المتوسط", minuteText(summary.average_minutes)], ["الوسيط", minuteText(summary.median_minutes)], ["الأسرع", minuteText(summary.fastest_minutes)], ["الأبطأ", minuteText(summary.slowest_minutes)]]);
+}
+
+const TRAINING_COMPETENCY_ITEMS = {
+  news2_components: "تحديد مكونات NEWS2 بشكل صحيح",
+  hd2_mnews_color: "تفسير لون خطورة HD2-MNEWS",
+  vital_signs_entry: "إدخال العلامات الحيوية دون أخطاء",
+  nursing_protocol: "اتباع بروتوكول التمريض حسب اللون",
+  escalation_documentation: "توثيق التصعيد والاستجابة"
+};
+
+const TRAINING_ACCEPTANCE_ITEMS = {
+  ease_of_use: "سهولة استخدام المنصة",
+  workflow_fit: "ملاءمة النظام لسير العمل",
+  clinical_confidence: "زيادة الثقة في التقييم السريري",
+  alert_usefulness: "فائدة التنبيهات في التصعيد",
+  training_satisfaction: "الرضا عن التدريب"
+};
+
+function renderNursingTraining() {
+  if (appState.loading.trainingSummary || appState.loading.trainingEvaluations) return loadingBlock("جاري تحميل تدريب التمريض...");
+  if (appState.errors.trainingSummary) return errorBlock("trainingSummary");
+  const summary = appState.trainingSummary || {};
+  const rows = appState.trainingEvaluations || [];
+  return `<div class="grid cols-4">
+    ${renderKpi(["إجمالي المتدربين", summary.totalEvaluatedStaff ?? 0, "تقييمات تدريب مكتملة", "info"])}
+    ${renderKpi(["متوسط التحسن", percentText(summary.averageKnowledgeImprovementPercent), "اختبار قبلي/بعدي", "success"])}
+    ${renderKpi(["اجتياز الكفاءة", percentText(summary.competencyPassRatePercent), "قائمة تحقق عملية", "warning"])}
+    ${renderKpi(["قبول النظام", summary.averageAcceptanceScore ?? "-", "متوسط 1-5", "info"])}
+  </div>
+  <div class="grid cols-2" style="margin-top:16px">
+    ${card("تقييم تدريب جديد", renderTrainingEvaluationForm())}
+    ${card("ملخص القبول", renderTrainingAcceptanceSummary(summary))}
+  </div>
+  <div style="margin-top:16px">${card("سجل تقييمات التدريب", renderTrainingEvaluationList(rows))}</div>`;
+}
+
+function renderTrainingEvaluationForm() {
+  const competencyItems = Object.entries(TRAINING_COMPETENCY_ITEMS).map(([key, text]) => `<label class="checkbox-item"><input type="checkbox" name="competency_${key}"><span>${text}</span></label>`).join("");
+  const acceptanceItems = Object.entries(TRAINING_ACCEPTANCE_ITEMS).map(([key, text]) => `<div class="field"><label>${text}</label><select name="acceptance_${key}" required>${[1, 2, 3, 4, 5].map((value) => `<option value="${value}" ${value === 4 ? "selected" : ""}>${value}</option>`).join("")}</select></div>`).join("");
+  return `<form class="form-grid" onsubmit="submitTrainingEvaluation(event)">
+    <div class="field"><label>اسم الموظف</label><input name="staff_name" required minlength="2" maxlength="160"></div>
+    <div class="field"><label>الدور</label><select name="staff_role" required><option value="nurse">تمريض</option><option value="doctor">طبيب</option><option value="on_call_doctor">طبيب مناوب</option><option value="researcher">باحث</option><option value="other">آخر</option></select></div>
+    <div class="field"><label>تاريخ التدريب</label><input type="date" name="training_date" required value="${new Date().toISOString().slice(0, 10)}"></div>
+    <div class="field"><label>درجة الاختبار القبلي</label><input type="number" name="pre_test_score" min="0" required value="0"></div>
+    <div class="field"><label>إجمالي الاختبار القبلي</label><input type="number" name="pre_test_total" min="1" required value="10"></div>
+    <div class="field"><label>درجة الاختبار البعدي</label><input type="number" name="post_test_score" min="0" required value="0"></div>
+    <div class="field"><label>إجمالي الاختبار البعدي</label><input type="number" name="post_test_total" min="1" required value="10"></div>
+    <div class="field full"><label>بنود الكفاءة العملية</label><div class="checkbox-grid">${competencyItems}</div></div>
+    ${acceptanceItems}
+    <div class="field full"><label>ملاحظات الكفاءة</label><textarea name="competency_notes" rows="2"></textarea></div>
+    <div class="field full"><label>ملاحظات عامة</label><textarea name="general_notes" rows="2"></textarea></div>
+    ${appState.trainingSubmission ? `<div class="state-message success full">${escapeHtml(appState.trainingSubmission.message || "تم حفظ تقييم التدريب")}</div>` : ""}
+    ${appState.errors.trainingSubmission ? `<div class="state-message error full">${escapeHtml(appState.errors.trainingSubmission)}</div>` : ""}
+    <div class="footer-actions full"><button class="btn primary" type="submit">حفظ التقييم</button><button class="btn" type="button" onclick="downloadTrainingExport()">تصدير CSV</button></div>
+  </form>`;
+}
+
+function renderTrainingAcceptanceSummary(summary) {
+  const counts = summary.acceptanceLevelCounts || {};
+  return renderTable(["مستوى القبول", "العدد"], [["مرتفع", counts.high || 0], ["متوسط", counts.medium || 0], ["منخفض", counts.low || 0], ["متوسط الاختبار القبلي", percentText(summary.averagePreTestPercent)], ["متوسط الاختبار البعدي", percentText(summary.averagePostTestPercent)]]);
+}
+
+function renderTrainingEvaluationList(rows) {
+  if (!rows.length) return emptyBlock("لا توجد تقييمات تدريب محفوظة حتى الآن");
+  return renderTable(["الموظف", "الدور", "التاريخ", "قبلي", "بعدي", "التحسن", "الكفاءة", "القبول"], rows.slice(0, 25).map((row) => [
+    row.staffName,
+    trainingRoleLabel(row.staffRole),
+    row.trainingDate || "-",
+    percentText(row.preTestPercent),
+    percentText(row.postTestPercent),
+    percentText(row.knowledgeImprovementPercent),
+    row.competencyPassed ? "مجتاز" : "غير مجتاز",
+    row.acceptanceLevelLabelAr
+  ]));
+}
+
+function trainingRoleLabel(value) {
+  return { nurse: "تمريض", doctor: "طبيب", on_call_doctor: "طبيب مناوب", researcher: "باحث", other: "آخر" }[value] || value || "-";
+}
+
+function downloadTrainingExport() {
+  window.location.href = "/api/training/export/csv";
+}
+
+function renderAlignmentAudit() {
+  if (appState.loading.alignmentAudit) return loadingBlock("جاري تحميل تدقيق مطابقة الرسالة...");
+  if (appState.errors.alignmentAudit) return errorBlock("alignmentAudit");
+  const audit = appState.alignmentAudit || { summary: {}, rows: [] };
+  const summary = audit.summary || {};
+  return `<div class="grid cols-4">
+    ${renderKpi(["نسبة الاكتمال", percentText(summary.completionPercentage), "متطلبات الرسالة والنموذج", "success"])}
+    ${renderKpi(["منفذ", summary.implementedCount ?? 0, "متطلبات مكتملة", "success"])}
+    ${renderKpi(["جزئي", summary.partialCount ?? 0, "يتطلب مراجعة", "warning"])}
+    ${renderKpi(["مفقود", summary.missingCount ?? 0, "فجوات متبقية", (summary.missingCount || 0) ? "danger" : "success"])}
+    ${renderKpi(["خارج النطاق", summary.outOfScopeCount ?? 0, "لا يظهر في الواجهة", "info"])}
+  </div>
+  <div class="grid cols-2" style="margin-top:16px">
+    ${card("متطلبات مقترح الدكتوراه", renderAlignmentGroupTable(audit.rows, "research_proposal"))}
+    ${card("متطلبات نموذج المراقبة الرقمية", renderAlignmentGroupTable(audit.rows, "digital_monitoring_form"))}
+  </div>
+  <div style="margin-top:16px">${card("ملاحظات التدقيق", renderAlignmentNotes(audit.rows))}</div>`;
+}
+
+function renderAlignmentGroupTable(rows, group) {
+  const groupRows = (rows || []).filter((row) => row.sourceDocumentCategory === group);
+  if (!groupRows.length) return emptyBlock("لا توجد متطلبات ضمن هذه المجموعة");
+  return renderTable(["المتطلب", "الحالة", "API", "واجهة", "حقول التصدير"], groupRows.map((row) => [
+    row.arabicLabel,
+    alignmentStatusLabel(row.status),
+    row.relatedApiRoute || "-",
+    row.relatedFrontendRoute || "-",
+    (row.relatedExportFields || []).join(", ") || "-"
+  ]));
+}
+
+function renderAlignmentNotes(rows) {
+  const actionable = (rows || []).filter((row) => row.status !== "implemented");
+  if (!actionable.length) return emptyBlock("لا توجد فجوات متبقية ضمن نطاق الوثيقتين المعتمدتين");
+  return `<div class="timeline">${actionable.map((row) => `<div class="timeline-item"><strong>${row.arabicLabel} - ${alignmentStatusLabel(row.status)}</strong><span>${escapeHtml(row.notes || "")}</span></div>`).join("")}</div>`;
+}
+
+function alignmentStatusLabel(value) {
+  return { implemented: "منفذ", partial: "جزئي", missing: "مفقود", out_of_scope: "خارج النطاق" }[value] || value || "-";
 }
 
 function percentText(value) {

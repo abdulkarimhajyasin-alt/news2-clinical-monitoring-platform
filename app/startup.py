@@ -27,6 +27,7 @@ def initialize_database(db_engine: Engine = engine) -> None:
     ensure_hd2_mnews_columns(db_engine)
     ensure_baseline_context_columns(db_engine)
     ensure_outcome_validation_72h_table(db_engine)
+    ensure_staff_training_evaluations_table(db_engine)
     logger.info("Database tables ready.")
 
 
@@ -165,6 +166,43 @@ def ensure_outcome_validation_72h_table(db_engine: Engine = engine) -> None:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
                     UNIQUE (dialysis_session_id)
+                )
+                """
+            )
+        )
+
+
+def ensure_staff_training_evaluations_table(db_engine: Engine = engine) -> None:
+    with db_engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS staff_training_evaluations (
+                    id INTEGER PRIMARY KEY,
+                    staff_user_id INTEGER,
+                    staff_name VARCHAR(160),
+                    staff_role VARCHAR(40) NOT NULL,
+                    study_id INTEGER,
+                    training_date DATE NOT NULL,
+                    pre_test_score INTEGER NOT NULL,
+                    pre_test_total INTEGER NOT NULL,
+                    post_test_score INTEGER NOT NULL,
+                    post_test_total INTEGER NOT NULL,
+                    knowledge_improvement_score INTEGER NOT NULL,
+                    knowledge_improvement_percent FLOAT NOT NULL,
+                    competency_items_json TEXT,
+                    competency_passed BOOLEAN DEFAULT FALSE NOT NULL,
+                    competency_score FLOAT NOT NULL,
+                    competency_notes TEXT,
+                    acceptance_survey_json TEXT,
+                    acceptance_total_score INTEGER NOT NULL,
+                    acceptance_mean_score FLOAT NOT NULL,
+                    acceptance_level VARCHAR(40) NOT NULL,
+                    general_notes TEXT,
+                    created_by_user_id INTEGER,
+                    updated_by_user_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
                 )
                 """
             )

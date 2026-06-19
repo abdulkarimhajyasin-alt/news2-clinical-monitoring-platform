@@ -33,6 +33,8 @@ def test_sidebar_navigation_keeps_research_monitoring_scope():
         "research-dashboard",
         "study-metrics",
         "prediction-evaluation",
+        "nursing-training",
+        "alignment-audit",
         "dataset-statistics",
         "study-management",
         "users",

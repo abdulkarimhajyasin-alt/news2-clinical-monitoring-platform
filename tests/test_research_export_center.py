@@ -27,6 +27,7 @@ from app.models import (
     UserRole,
 )
 from app.services.hd2_protocol_service import build_hd2_nursing_protocol
+from app.services.export_service import DATASET_FIELDS
 
 
 @pytest.fixture()
@@ -335,12 +336,95 @@ def test_dataset_includes_prediction_classification_fields(export_client):
     assert row["classification_reason"]
 
 
+def test_dataset_includes_final_research_alignment_fields(export_client):
+    response = export_client.get("/api/research/dataset", params={"risk_level": "high"})
+
+    assert response.status_code == 200
+    row = response.json()[0]
+    required_fields = {
+        "patient_code",
+        "age",
+        "gender",
+        "education_level",
+        "dry_weight_kg",
+        "dialysis_start_date",
+        "weekly_sessions_count",
+        "comorbidities",
+        "vascular_access_type",
+        "vascular_access_location",
+        "vascular_access_placement_date",
+        "session_date",
+        "weekday",
+        "actual_start_time",
+        "target_fluid_removal_ml",
+        "respiratory_rate",
+        "spo2",
+        "temperature",
+        "systolic_bp",
+        "pulse_rate",
+        "consciousness_level",
+        "vascular_access_status",
+        "idwg_percent",
+        "ufr",
+        "potassium",
+        "respiratory_score",
+        "spo2_score",
+        "oxygen_score",
+        "systolic_bp_score",
+        "pulse_score",
+        "temperature_score",
+        "consciousness_score",
+        "hd2_mnews_total_score",
+        "hd2_risk_color",
+        "hd2_mnews_critical_trigger",
+        "hd2_mnews_critical_reasons",
+        "hd2_risk_label_ar",
+        "hd2_reassessment_interval_min",
+        "hd2_reassessment_interval_max",
+        "outcome_validation_completed",
+        "deterioration_occurred",
+        "deterioration_types_72h",
+        "deterioration_timing_category",
+        "outcome_validation_deterioration_time",
+        "outcome_validation_deterioration_datetime",
+        "platform_prediction_status",
+        "interventions_72h",
+        "doctor_response_time_minutes_72h",
+        "final_result_72h",
+        "verification_sources",
+        "prediction_classification",
+        "true_positive_early",
+        "false_negative",
+        "true_negative",
+        "false_positive",
+        "early_detection_marker",
+        "classification_reason",
+        "training_records_count",
+        "training_average_pre_test_percent",
+        "training_average_post_test_percent",
+        "training_average_improvement_percent",
+        "training_average_competency_score",
+        "training_competency_pass_rate_percent",
+        "training_average_acceptance_score",
+    }
+    assert required_fields.issubset(row.keys())
+    assert required_fields.issubset(set(DATASET_FIELDS))
+
+
 def test_csv_export_includes_prediction_classification_fields(export_client):
     response = export_client.get("/api/research/export/csv")
 
     assert response.status_code == 200
     assert "prediction_classification" in response.text
     assert "true_positive_early" in response.text
+
+
+def test_csv_export_includes_final_research_alignment_header_fields(export_client):
+    response = export_client.get("/api/research/export/csv")
+
+    assert response.status_code == 200
+    for field in ["vascular_access_status", "idwg_percent", "hd2_mnews_critical_trigger", "training_average_acceptance_score"]:
+        assert field in response.text.splitlines()[0]
 
 
 def test_filters_work(export_client):

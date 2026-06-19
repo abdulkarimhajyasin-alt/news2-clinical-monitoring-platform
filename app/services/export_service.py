@@ -22,8 +22,10 @@ from app.models import (
     Patient,
     PatientVascularAccess,
     ResponseTracking,
+    StaffTrainingEvaluation,
 )
 from app.services.research_evaluation_service import prediction_export_fields_for_session
+from app.services.training_evaluation_service import build_training_summary
 
 
 DATASET_FIELDS = [
@@ -77,6 +79,10 @@ DATASET_FIELDS = [
     "temperature",
     "consciousness_level",
     "confusion_status",
+    "vascular_access_status",
+    "idwg_percent",
+    "ufr",
+    "potassium",
     "news2_assessment_id",
     "respiratory_score",
     "spo2_score",
@@ -90,6 +96,8 @@ DATASET_FIELDS = [
     "alert_required",
     "trigger_reason",
     "hd2_mnews_total_score",
+    "hd2_mnews_critical_trigger",
+    "hd2_mnews_critical_reasons",
     "hd2_risk_color",
     "hd2_risk_label_ar",
     "hd2_reassessment_interval_min",
@@ -139,6 +147,8 @@ DATASET_FIELDS = [
     "deterioration_occurred",
     "deterioration_types_72h",
     "deterioration_timing_category",
+    "outcome_validation_deterioration_time",
+    "outcome_validation_deterioration_datetime",
     "platform_prediction_status",
     "interventions_72h",
     "doctor_response_time_minutes_72h",
@@ -165,6 +175,16 @@ DATASET_FIELDS = [
     "specificity_group_marker",
     "early_detection_marker",
     "classification_reason",
+    "training_records_count",
+    "training_average_pre_test_percent",
+    "training_average_post_test_percent",
+    "training_average_improvement_percent",
+    "training_average_competency_score",
+    "training_competency_pass_rate_percent",
+    "training_average_acceptance_score",
+    "training_acceptance_high_count",
+    "training_acceptance_medium_count",
+    "training_acceptance_low_count",
 ]
 
 
@@ -189,6 +209,8 @@ VARIABLE_LABELS = {
     "news2_total_score": "NEWS2 total score",
     "risk_level": "NEWS2 risk level",
     "hd2_mnews_total_score": "HD2-mNEWS total score",
+    "hd2_mnews_critical_trigger": "HD2-mNEWS automatic red critical trigger flag",
+    "hd2_mnews_critical_reasons": "HD2-mNEWS critical trigger reasons",
     "hd2_risk_color": "HD2-mNEWS risk color",
     "hd2_risk_label_ar": "HD2-mNEWS Arabic risk label",
     "hd2_reassessment_interval_min": "HD2 protocol minimum reassessment interval in minutes",
@@ -207,6 +229,13 @@ VARIABLE_LABELS = {
     "final_result_72h": "Final 72-hour validation result",
     "prediction_classification": "Prediction accuracy classification for the dialysis session",
     "classification_reason": "Reason used for prediction accuracy classification",
+    "training_records_count": "Number of staff training evaluation records",
+    "training_average_pre_test_percent": "Average nurse/staff pre-test percentage",
+    "training_average_post_test_percent": "Average nurse/staff post-test percentage",
+    "training_average_improvement_percent": "Average nurse/staff knowledge improvement percentage",
+    "training_average_competency_score": "Average practical competency score percentage",
+    "training_competency_pass_rate_percent": "Percentage of staff passing competency checklist",
+    "training_average_acceptance_score": "Average staff acceptance score on 1-5 scale",
 }
 
 
@@ -220,6 +249,7 @@ VALUE_LABELS = {
 
 def build_research_dataset(db: Session, filters: dict[str, object] | None = None, limit: int | None = None) -> list[dict[str, object]]:
     filters = filters or {}
+    training_summary = build_training_summary(db) if db.query(StaffTrainingEvaluation).count() else None
     assessments = (
         db.query(News2Assessment)
         .join(IntradialyticMeasurement, News2Assessment.intradialytic_measurement_id == IntradialyticMeasurement.id)
@@ -261,7 +291,7 @@ def build_research_dataset(db: Session, filters: dict[str, object] | None = None
             .first()
         )
         prediction_fields = prediction_export_fields_for_session(db, assessment.dialysis_session_id)
-        row = _dataset_row(patient, session, access, measurement, assessment, alert, event, response, tracking, outcome, validation, prediction_fields)
+        row = _dataset_row(patient, session, access, measurement, assessment, alert, event, response, tracking, outcome, validation, prediction_fields, training_summary)
         if _matches_filters(row, filters):
             rows.append(_public_row(row))
             if limit is not None and len(rows) >= limit:
@@ -435,9 +465,12 @@ def _dataset_row(
     outcome: ClinicalOutcome | None,
     validation: OutcomeValidation72h | None = None,
     prediction_fields: dict[str, object] | None = None,
+    training_summary: dict[str, object] | None = None,
 ) -> dict[str, object]:
     validation_details = _json_dict(validation.type_specific_details) if validation else {}
     prediction_fields = prediction_fields or {}
+    training_summary = training_summary or {}
+    acceptance_counts = training_summary.get("acceptance_level_counts") if isinstance(training_summary.get("acceptance_level_counts"), dict) else {}
     return {
         "_patient_id": patient.id,
         "patient_code": patient.patient_code,
@@ -490,6 +523,10 @@ def _dataset_row(
         "temperature": measurement.temperature,
         "consciousness_level": measurement.consciousness_level,
         "confusion_status": measurement.confusion_status,
+        "vascular_access_status": measurement.vascular_access_status,
+        "idwg_percent": measurement.idwg_percent,
+        "ufr": measurement.ufr,
+        "potassium": measurement.potassium,
         "news2_assessment_id": assessment.id,
         "respiratory_score": assessment.respiratory_score,
         "spo2_score": assessment.spo2_score,
@@ -503,6 +540,8 @@ def _dataset_row(
         "alert_required": assessment.alert_required,
         "trigger_reason": assessment.trigger_reason,
         "hd2_mnews_total_score": assessment.hd2_mnews_total_score,
+        "hd2_mnews_critical_trigger": assessment.hd2_mnews_critical_trigger,
+        "hd2_mnews_critical_reasons": _join_json_list(assessment.hd2_mnews_critical_reasons),
         "hd2_risk_color": assessment.hd2_mnews_risk_color,
         "hd2_risk_label_ar": assessment.hd2_mnews_risk_label_ar,
         "hd2_reassessment_interval_min": assessment.hd2_reassessment_interval_min,
@@ -552,6 +591,8 @@ def _dataset_row(
         "deterioration_occurred": validation.deterioration_occurred if validation else None,
         "deterioration_types_72h": _join_json_list(validation.deterioration_types if validation else None),
         "deterioration_timing_category": validation.deterioration_timing_category if validation else None,
+        "outcome_validation_deterioration_time": validation.deterioration_time if validation else None,
+        "outcome_validation_deterioration_datetime": validation.deterioration_datetime if validation else None,
         "platform_prediction_status": validation.platform_prediction_status if validation else None,
         "interventions_72h": _join_json_list(validation.interventions if validation else None),
         "doctor_response_time_minutes_72h": validation.doctor_response_time_minutes if validation else None,
@@ -578,6 +619,16 @@ def _dataset_row(
         "specificity_group_marker": prediction_fields.get("specificity_group_marker"),
         "early_detection_marker": prediction_fields.get("early_detection_marker"),
         "classification_reason": prediction_fields.get("classification_reason"),
+        "training_records_count": training_summary.get("total_evaluated_staff"),
+        "training_average_pre_test_percent": training_summary.get("average_pre_test_percent"),
+        "training_average_post_test_percent": training_summary.get("average_post_test_percent"),
+        "training_average_improvement_percent": training_summary.get("average_knowledge_improvement_percent"),
+        "training_average_competency_score": training_summary.get("average_competency_score"),
+        "training_competency_pass_rate_percent": training_summary.get("competency_pass_rate_percent"),
+        "training_average_acceptance_score": training_summary.get("average_acceptance_score"),
+        "training_acceptance_high_count": acceptance_counts.get("high") if acceptance_counts else None,
+        "training_acceptance_medium_count": acceptance_counts.get("medium") if acceptance_counts else None,
+        "training_acceptance_low_count": acceptance_counts.get("low") if acceptance_counts else None,
     }
 
 

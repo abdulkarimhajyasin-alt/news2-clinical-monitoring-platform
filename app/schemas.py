@@ -1060,3 +1060,104 @@ class StudyReadinessReport(BaseModel):
     dashboard: dict[str, object]
     protocol: dict[str, object] = Field(default_factory=dict)
     timeline: dict[str, object] = Field(default_factory=dict)
+
+
+StaffTrainingRole = Literal["nurse", "doctor", "on_call_doctor", "researcher", "other"]
+AcceptanceLevel = Literal["low", "medium", "high"]
+
+
+class StaffTrainingEvaluationBase(BaseModel):
+    staff_user_id: int | None = Field(default=None, gt=0)
+    staff_name: str | None = Field(default=None, min_length=2, max_length=160)
+    staff_role: StaffTrainingRole
+    study_id: int | None = Field(default=None, gt=0)
+    training_date: date
+    pre_test_score: int = Field(ge=0)
+    pre_test_total: int = Field(gt=0)
+    post_test_score: int = Field(ge=0)
+    post_test_total: int = Field(gt=0)
+    competency_items: dict[str, bool] = Field(default_factory=dict)
+    competency_notes: str | None = Field(default=None, max_length=4000)
+    acceptance_survey: dict[str, int] = Field(default_factory=dict)
+    general_notes: str | None = Field(default=None, max_length=4000)
+    created_by_user_id: int | None = Field(default=None, gt=0)
+    updated_by_user_id: int | None = Field(default=None, gt=0)
+
+    @field_validator("staff_name", "competency_notes", "general_notes")
+    @classmethod
+    def strip_training_text(cls, value: str | None) -> str | None:
+        return value.strip() if isinstance(value, str) else value
+
+    def model_post_init(self, __context) -> None:
+        if self.staff_user_id is None and not self.staff_name:
+            raise ValueError("staff_name is required when staff_user_id is not provided")
+
+
+class StaffTrainingEvaluationCreate(StaffTrainingEvaluationBase):
+    pass
+
+
+class StaffTrainingEvaluationUpdate(StaffTrainingEvaluationBase):
+    pass
+
+
+class StaffTrainingEvaluationRead(StaffTrainingEvaluationBase):
+    id: int
+    pre_test_percent: float
+    post_test_percent: float
+    knowledge_improvement_score: int
+    knowledge_improvement_percent: float
+    competency_passed: bool
+    competency_score: float
+    acceptance_total_score: int
+    acceptance_mean_score: float
+    acceptance_level: AcceptanceLevel
+    acceptance_level_label_ar: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class StaffTrainingEvaluationResult(BaseModel):
+    evaluation: StaffTrainingEvaluationRead
+    evaluation_created: bool
+    message: str
+
+
+class StaffTrainingSummary(BaseModel):
+    total_evaluated_staff: int
+    average_pre_test_percent: float | None = None
+    average_post_test_percent: float | None = None
+    average_knowledge_improvement_percent: float | None = None
+    competency_pass_rate_percent: float | None = None
+    average_competency_score: float | None = None
+    average_acceptance_score: float | None = None
+    acceptance_level_counts: dict[str, int] = Field(default_factory=dict)
+
+
+AlignmentAuditStatus = Literal["implemented", "partial", "missing", "out_of_scope"]
+
+
+class AlignmentAuditRow(BaseModel):
+    requirement_key: str
+    arabic_label: str
+    technical_label: str
+    source_document_category: str
+    status: AlignmentAuditStatus
+    related_api_route: str | None = None
+    related_frontend_route: str | None = None
+    related_export_fields: list[str] = Field(default_factory=list)
+    notes: str | None = None
+
+
+class AlignmentAuditSummary(BaseModel):
+    total_requirements: int
+    completion_percentage: float
+    implemented_count: int
+    partial_count: int
+    missing_count: int
+    out_of_scope_count: int
+
+
+class AlignmentAuditResponse(BaseModel):
+    summary: AlignmentAuditSummary
+    rows: list[AlignmentAuditRow]
