@@ -10,9 +10,9 @@ const routes = [
   { id: "session-details", label: "تفاصيل الجلسة", group: "الجلسات", icon: "SD", type: "details", entity: "session" },
   { id: "intradialytic-monitoring", label: "الرصد أثناء الجلسة", group: "الجلسات", icon: "M", type: "monitoring" },
   { id: "vital-signs-entry", label: "إدخال العلامات الحيوية", group: "التقييم", icon: "VS", type: "form", entity: "vitals" },
-  { id: "news2-assessment", label: "تقييم NEWS2", group: "التقييم", icon: "N2", type: "assessment" },
-  { id: "news2-trend", label: "اتجاه NEWS2", group: "التقييم", icon: "T", type: "trend" },
-  { id: "news2-history", label: "سجل NEWS2", group: "التقييم", icon: "H", type: "table", entity: "news2" },
+  { id: "news2-assessment", label: "نتيجة HD2-mNEWS", group: "التقييم", icon: "N2", type: "assessment" },
+  { id: "news2-trend", label: "اتجاه HD2-mNEWS", group: "التقييم", icon: "T", type: "trend" },
+  { id: "news2-history", label: "سجل HD2-mNEWS", group: "التقييم", icon: "H", type: "table", entity: "news2" },
   { id: "active-alerts", label: "التنبيهات النشطة", group: "التنبيهات", icon: "A", type: "alerts" },
   { id: "alert-details", label: "تفاصيل التنبيه", group: "التنبيهات", icon: "AD", type: "details", entity: "alert" },
   { id: "alert-timeline", label: "تسلسل التنبيه", group: "التنبيهات", icon: "TL", type: "timeline", entity: "alert" },
@@ -72,15 +72,15 @@ const ROUTE_LABEL_OVERRIDES = {
   "create-session": "تسجيل جلسة",
   "intradialytic-monitoring": "المراقبة الرقمية",
   "vital-signs-entry": "إدخال القياسات",
-  "news2-assessment": "تقييم NEWS2",
-  "news2-history": "سجل NEWS2",
+  "news2-assessment": "نتيجة HD2-mNEWS",
+  "news2-history": "سجل HD2-mNEWS",
   "active-alerts": "التنبيهات",
   "deterioration-events": "توثيق التدهور",
   "medical-response-log": "استجابة الطبيب",
   "nursing-response-log": "استجابة التمريض",
   "response-workflow": "الاستجابة السريرية",
   "response-time-dashboard": "زمن الاستجابة",
-  "clinical-outcomes": "النتيجة السريرية",
+  "clinical-outcomes": "النتيجة السريرية 72 ساعة",
   "outcome-tracking": "تتبع النتيجة",
   "research-dashboard": "التحليل البحثي",
   "study-metrics": "مؤشرات البحث",
@@ -135,10 +135,7 @@ const NAV_GROUPS = [
     icon: "E",
     children: [
       { route: "deterioration-events" },
-      { route: "response-workflow" },
-      { route: "medical-response-log" },
-      { route: "nursing-response-log" },
-      { route: "response-time-dashboard" }
+      { route: "response-workflow" }
     ]
   },
   {
@@ -160,9 +157,7 @@ const NAV_GROUPS = [
     icon: "R",
     children: [
       { route: "research-dashboard" },
-      { route: "study-metrics", permission: "research:analytics" },
-      { route: "prediction-evaluation", permission: "research:analytics" },
-      { route: "dataset-statistics", permission: "research:view" }
+      { route: "prediction-evaluation", permission: "research:analytics" }
     ]
   },
   {
@@ -199,9 +194,9 @@ const NAV_ROUTE_LABELS = {
   "session-details": "تفاصيل الجلسة",
   "intradialytic-monitoring": "المراقبة الرقمية",
   "vital-signs-entry": "إدخال القياسات",
-  "news2-assessment": "تقييم NEWS2",
-  "news2-trend": "اتجاه NEWS2",
-  "news2-history": "سجل NEWS2",
+  "news2-assessment": "نتيجة HD2-mNEWS",
+  "news2-trend": "اتجاه HD2-mNEWS",
+  "news2-history": "سجل HD2-mNEWS",
   "active-alerts": "التنبيهات",
   "alert-details": "تفاصيل التنبيه",
   "alert-timeline": "تسلسل التنبيه",
@@ -213,7 +208,7 @@ const NAV_ROUTE_LABELS = {
   "response-workflow": "الاستجابة السريرية",
   "response-time-dashboard": "زمن الاستجابة",
   "response-analytics": "تحليلات الاستجابة",
-  "clinical-outcomes": "النتيجة السريرية",
+  "clinical-outcomes": "النتيجة السريرية 72 ساعة",
   "outcome-tracking": "تتبع النتيجة",
   "outcome-analytics": "تحليلات المآلات",
   "research-dashboard": "التحليل البحثي",
@@ -1194,7 +1189,7 @@ const PERMISSION_RESOURCE_LABELS = {
   patients: "المرضى",
   sessions: "جلسات الغسيل",
   measurements: "العلامات الحيوية",
-  news2: "تقييم NEWS2",
+  news2: "تقييم HD2-mNEWS",
   alerts: "التنبيهات",
   deterioration: "أحداث التدهور",
   responses: "الاستجابات",
@@ -1922,7 +1917,7 @@ function renderDashboard() {
       ${renderActionKpi(["المآلات", summary.outcomesCount ?? 0, "من /api/outcomes", (summary.outcomesCount || 0) ? "info" : "success"], "clinical-outcomes", "عرض المآلات السريرية")}
     </div>
     <div class="grid cols-2" style="margin-top:16px">
-      ${card("منحنى NEWS2 اليوم", renderLineChart("اتجاه NEWS2 تجريبي لحين توفير endpoint للاتجاهات"))}
+      ${card("منحنى HD2-mNEWS اليوم", renderLineChart("اتجاه HD2-mNEWS تجريبي لحين توفير endpoint للاتجاهات"))}
       ${card("توزيع مؤشرات البحث", renderBarChart([summary.patientsCount || 0, summary.sessionsCount || 0, summary.measurementsCount || 0, summary.alertsCount || 0]))}
     </div>
     <div style="margin-top:16px">
@@ -2164,7 +2159,7 @@ function renderStaticTable(route) {
     return renderClinicalOutcomes();
   }
   if (route.entity === "news2") {
-    if (appState.loading.news2Assessments) return tableSkeleton("جاري تحميل سجل NEWS2...");
+    if (appState.loading.news2Assessments) return tableSkeleton("جاري تحميل سجل HD2-mNEWS...");
     if (appState.errors.news2Assessments) return errorBlock("news2Assessments");
     if (appState.news2Assessments.length) {
       const rows = appState.news2Assessments.map((item) => [
@@ -2176,7 +2171,7 @@ function renderStaticTable(route) {
         item.alertRequired ? "يتطلب تنبيها" : "دون عتبة التنبيه",
         formatDateTime(item.createdAt)
       ]);
-      return card("سجل NEWS2", renderTable(["المعرف", "المريض", "الجلسة", "الدرجة", "الخطورة", "الحالة", "وقت الإنشاء"], rows));
+      return card("سجل HD2-mNEWS", renderTable(["المعرف", "المريض", "الجلسة", "الدرجة", "الخطورة", "الحالة", "وقت الإنشاء"], rows));
     }
   }
   const rows = fallbackRows[route.entity] || fallbackRows.events;
@@ -2618,7 +2613,7 @@ function renderProfile() {
       ["تاريخ تركيب الوصلة", patient.vascularAccessPlacementDate || "-"]
     ].map(([a, b]) => `<div class="summary-cell"><span>${escapeHtml(a)}</span><strong>${escapeHtml(b)}</strong></div>`).join("")}</div>`)}
     <div class="grid cols-2" style="margin-top:16px">
-      ${card("اتجاه NEWS2", news2Scores.length ? renderBarChart(news2Scores) : emptyBlock("لا توجد قراءات NEWS2 لهذا المريض حتى الآن"))}
+      ${card("اتجاه HD2-mNEWS", news2Scores.length ? renderBarChart(news2Scores) : emptyBlock("لا توجد قراءات HD2-mNEWS لهذا المريض حتى الآن"))}
       ${card("آخر الجلسات", patientSessions.length ? renderTable(["المعرف", "التاريخ", "الحالة"], patientSessions.map((session) => [session.id, session.sessionDate, label(labels.sessionStatus, session.sessionStatus)])) : emptyBlock("لا توجد جلسات غسيل لهذا المريض حتى الآن"))}
     </div>
     <div class="grid cols-3" style="margin-top:16px">
@@ -3271,7 +3266,7 @@ async function calculateNews2Demo(event) {
 }
 
 function renderTrend() {
-  return `<div class="grid cols-3">${renderKpi(["آخر قراءة", "16", "عالية الخطورة", "danger"], true)}${renderKpi(["أعلى قراءة", "16", "من بيانات التهيئة", "warning"])}${renderKpi(["متوسط النظام", appState.researchSummary?.averageNews2 ?? "-", "من API", "info"])}</div><div style="margin-top:16px">${card("اتجاه NEWS2", renderLineChart("اتجاه NEWS2"))}</div>`;
+  return `<div class="grid cols-3">${renderKpi(["آخر قراءة", "16", "عالية الخطورة", "danger"], true)}${renderKpi(["أعلى قراءة", "16", "من بيانات التهيئة", "warning"])}${renderKpi(["متوسط النظام", appState.researchSummary?.averageNews2 ?? "-", "من API", "info"])}</div><div style="margin-top:16px">${card("اتجاه HD2-mNEWS", renderLineChart("اتجاه HD2-mNEWS"))}</div>`;
 }
 
 function renderTimeline(route) {
